@@ -1,0 +1,9 @@
+Customer Name,Metadata,Metadata.Id,Metadata.Bio.Name,Metadata.Bio.Birthday
+Company 1,"{ ""Id"": 1, ""Bio"": { ""Name"": ""John Smith"", ""Birthday"": ""01-01-1960"" } }",1,John Smith,01-01-1960
+Company 2,"{
+	""Id"": 2,
+	""Bio"": {
+		""Name"": ""Jane Smith"",
+		""Birthday"": ""12-01-1960""
+	}
+}",2,Jane Smith,12-01-1960

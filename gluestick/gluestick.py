@@ -1,5 +1,6 @@
 from functools import reduce
 import pandas as pd
+import ast
 from pandas.io.json._normalize import nested_to_record
 
 
@@ -28,7 +29,7 @@ def explode_json_to_rows(df, column_name):
     child_df = child_df.explode(column_name)
 
     # Flatten JSON using pandas util
-    def flatten(y): return pd.Series(nested_to_record(y, sep='.'))
+    def flatten(y): return pd.Series(nested_to_record(ast.literal_eval(y), sep='.'))
 
     # Each row is flattened
     child_df = pd.concat([child_df, child_df[column_name].apply(flatten).add_prefix(f"{column_name}.")], axis=1)
@@ -36,7 +37,7 @@ def explode_json_to_rows(df, column_name):
     return child_df
 
 
-# Converts array [{Name: "First", Value: "Irfan"}, {Name: "Last", Value: "Zulfiqar"}]
+# Converts array [{"Name": "First", "Value": "John"}, {"Name": "Last", "Value": "Smith"}]
 def explode_json_to_cols(df, column_name, **kwargs):
     # Default reducer
     reducer = kwargs.get('reducer', array_to_dict_reducer('Name', 'Value'))
@@ -45,7 +46,9 @@ def explode_json_to_cols(df, column_name, **kwargs):
     child_df = df[source_columns]
     child_df = child_df.pipe(
         lambda x: x.drop(column_name, 1).join(
-            x[column_name].apply(lambda y: pd.Series(reduce(reducer, y, {})))
+            x[column_name].apply(
+                lambda y: pd.Series(reduce(reducer, ast.literal_eval(y), {}))
+            )
         )
     )
     return child_df
