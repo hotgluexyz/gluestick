@@ -1,4 +1,5 @@
 import pytest
+import os
 import pandas as pd
 
 import gluestick as gs
@@ -20,8 +21,9 @@ class TestETL(object):
         print("test_explode_json_to_cols")
 
         # Read data
-        df = pd.read_excel('data/input/json_to_cols.xlsx')
-        expected_df = pd.read_csv('data/output/json_to_cols.csv')
+        dirname = os.path.dirname(__file__)
+        df = pd.read_excel(os.path.join(dirname, 'data/input/json_to_cols.xlsx'))
+        expected_df = pd.read_csv(os.path.join(dirname, 'data/output/json_to_cols.csv'))
 
         # Explode
         r = gs.array_to_dict_reducer('Name', 'StringValue')
@@ -37,8 +39,9 @@ class TestETL(object):
         print("test_explode_json_to_rows")
 
         # Read data
-        df = pd.read_excel('data/input/json_to_rows.xlsx')
-        expected_df = pd.read_csv('data/output/json_to_rows.csv')
+        dirname = os.path.dirname(__file__)
+        df = pd.read_excel(os.path.join(dirname, 'data/input/json_to_rows.xlsx'))
+        expected_df = pd.read_csv(os.path.join(dirname, 'data/output/json_to_rows.csv'))
 
         # Explode
         df2 = gs.explode_json_to_rows(df, "Metadata")
