@@ -1,9 +1,8 @@
-Customer Name,Metadata,Metadata.Id,Metadata.Bio.Name,Metadata.Bio.Birthday
-Company 1,"{ ""Id"": 1, ""Bio"": { ""Name"": ""John Smith"", ""Birthday"": ""01-01-1960"" } }",1,John Smith,01-01-1960
-Company 2,"{
-	""Id"": 2,
-	""Bio"": {
-		""Name"": ""Jane Smith"",
-		""Birthday"": ""12-01-1960""
-	}
-}",2,Jane Smith,12-01-1960
+﻿Customer Name,Line Detail.Id,Line Detail.Desc,Line Detail.Amount
+Company 1,1,Bolts,101.15
+Company 1,2,Smith,90.8
+Company 2,1,Braces,51.15
+Company 2,2,Wood,190.1
+Company 3,1,Braces,51.15
+Company 4,NaN,NaN,NaN
+Company 5,1,Braces,51.15

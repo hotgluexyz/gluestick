@@ -137,7 +137,7 @@ def rename(df, target_columns):
     return df
 
 
-def explode_json_to_rows(df, column_name, max_level=1):
+def explode_json_to_rows(df, column_name, drop=True, **kwargs):
     """
           Explodes into multiple rows and expands into columns based on a column that has an array of JSON objects in it.
 
@@ -145,7 +145,7 @@ def explode_json_to_rows(df, column_name, max_level=1):
            ----------
            :param df : the dataframe
            :param column_name: the column that has the JSON in it.
-           :param max_level: how many levels to expand the data to
+           :param drop: drop the source column in the result. Default is True
 
                .. versionadded:: 1.0.0
            Returns
@@ -167,18 +167,31 @@ Index
 1037         None         None       335.25   SubTotalLineDetail
 1036            1            1        50.00  SalesItemLineDetail
            """
-    source_df = df.explode(column_name)
-
     # Explode to new rows
+    max_level = kwargs.get("max_level", 1)
 
-    def flatten(y):
+    def to_list(y):
         if type(y) is str:
             y = ast.literal_eval(y)
-        return pd.Series(nested_to_record(y, sep='.', max_level=max_level))
 
-    # Each row is flattened
-    final_df = pd.concat([source_df, source_df[column_name].apply(flatten).add_prefix(f"{column_name}.")], axis=1)
-    final_df.drop(column_name, 1)
+        if type(y) is not list:
+            y = [y]
+
+        return y
+
+    def flatten(y):
+        if type(y) is dict:
+            return pd.Series(nested_to_record(y, sep='.', max_level=max_level))
+        else:
+            return pd.Series()
+
+    df[column_name] = df[column_name].apply(to_list)
+
+    ip_df = df.explode(column_name)
+
+    final_df = pd.concat([ip_df, ip_df[column_name].apply(flatten).add_prefix(f"{column_name}.")], axis=1)
+    if drop:
+        final_df = final_df.drop(column_name, 1)
 
     return final_df
 
@@ -186,8 +199,8 @@ Index
 def explode_json_to_cols(df, column_name, **kwargs):
     """
               Converts a JSON column that has an array value such as  [{"Name": "First", "Value": "John"},
-              {"Name": "Last", "Value": "Smith"}] into a data_frame with a column for each value.
-
+              {"Name": "Last", "Value": "Smith"}] into a data_frame with a column for each value. Note that the new series
+              produced from the JSON will be de-duplicated and inner joined with the index.
 
                Parameters
                ----------
@@ -213,6 +226,7 @@ def explode_json_to_cols(df, column_name, **kwargs):
                """
 
     reducer = kwargs.get('reducer', array_to_dict_reducer('Name', 'Value'))
+    drop = kwargs.get('drop', True)
 
     def json_to_series(y):
         value = y
@@ -226,14 +240,15 @@ def explode_json_to_cols(df, column_name, **kwargs):
         else:
             return pd.Series([])
 
-    source_columns = df.columns
-    child_df = df[source_columns]
-    child_df = child_df.pipe(
-        lambda x: x.drop(column_name, 1).join(
-            x[column_name].apply(json_to_series)
-        )
-    )
-    return child_df
+    new_df = df[column_name].apply(json_to_series).add_prefix(f"{column_name}.")
+    new_df = new_df[~new_df.index.duplicated(keep='first')]
+
+    if drop:
+        df = df.drop(column_name, 1)
+
+    df = df.join(new_df, how='inner')
+
+    return df
 
 
 def array_to_dict_reducer(key_prop, value_prop):

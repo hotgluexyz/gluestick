@@ -22,8 +22,8 @@ class TestETL(object):
 
         # Read data
         dirname = os.path.dirname(__file__)
-        df = pd.read_excel(os.path.join(dirname, 'data/input/json_to_cols.xlsx'))
-        expected_df = pd.read_csv(os.path.join(dirname, 'data/output/json_to_cols.csv'))
+        df = pd.read_excel(os.path.join(dirname, 'data/input/json_to_cols.xlsx'), index_col=0)
+        expected_df = pd.read_csv(os.path.join(dirname, 'data/output/json_to_cols.csv'), index_col=0)
 
         # Explode
         r = gs.array_to_dict_reducer('Name', 'StringValue')
@@ -40,12 +40,44 @@ class TestETL(object):
 
         # Read data
         dirname = os.path.dirname(__file__)
-        df = pd.read_excel(os.path.join(dirname, 'data/input/json_to_rows.xlsx'))
-        expected_df = pd.read_csv(os.path.join(dirname, 'data/output/json_to_rows.csv'))
+        df = pd.read_excel(os.path.join(dirname, 'data/input/json_to_rows.xlsx'), index_col=0)
+        expected_df = pd.read_csv(os.path.join(dirname, 'data/output/json_to_rows.csv'), index_col=0).astype(
+            {'Line Detail.Id': 'float64'})
 
         # Explode
-        df2 = gs.explode_json_to_rows(df, "Metadata")
-        print(df2)
-
+        df2 = gs.explode_json_to_rows(df, "Line Detail").astype({'Line Detail.Id': 'float64'})
         assert df2.equals(expected_df)
         print("test_explode_json_to_rows output is correct")
+
+    def test_explode_multi(self):
+        print("=====")
+        print("test_explode_multi")
+
+        # Read data
+        dirname = os.path.dirname(__file__)
+        df = pd.read_excel(os.path.join(dirname, 'data/input/multi_json.xlsx'), index_col=0)
+        expected_df = (pd.read_csv(os.path.join(dirname, 'data/output/explode_multi.csv'), index_col=0)
+                       .pipe(lambda x: x.astype({'LineDetail.Id': 'float64'}))
+                       .pipe(lambda x: x.sort_index(axis=1))
+                       )
+
+        transformed_df = (df
+                          .pipe(gs.explode_json_to_cols, "Metadata",
+                                reducer=gs.array_to_dict_reducer('Name', 'StringValue'))
+                          .pipe(gs.explode_json_to_rows, "LineDetail")
+                          .pipe(lambda x: x.astype({'LineDetail.Id': 'float64'}))
+                          .pipe(lambda x: x.sort_index(axis=1))
+                          )
+        assert transformed_df.equals(expected_df)
+
+        # changing order should not matter
+        transformed_df = (df
+                          .pipe(gs.explode_json_to_rows, "LineDetail")
+                          .pipe(gs.explode_json_to_cols, "Metadata",
+                                reducer=gs.array_to_dict_reducer('Name', 'StringValue'))
+                          .pipe(lambda x: x.astype({'LineDetail.Id': 'float64'}))
+                          .pipe(lambda x: x.sort_index(axis=1))
+                          )
+        assert transformed_df.equals(expected_df)
+
+        print("test_explode_multi output is correct")

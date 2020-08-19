@@ -1,0 +1,5 @@
+﻿CompanyId,Customer Name,Total,Metadata.FirstName,Metadata.LastName,LineDetail.Id,LineDetail.Desc,LineDetail.Amount
+100,Company 1,191.95,John,Smith,1,Bolts,101.15
+100,Company 1,191.95,John,Smith,2,Smith,90.8
+200,Company 2,241.25,Jane,Smith,1,Braces,51.15
+200,Company 2,241.25,Jane,Smith,2,Wood,190.1
