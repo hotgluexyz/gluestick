@@ -216,16 +216,16 @@ def explode_json_to_cols(df, column_name, **kwargs):
                Examples
                --------
 
-               IN[5]: explode_json_to_rows(df, df['ProductRef'] )
+               IN[5]: explode_json_to_cols(df, 'ProductRef' )
                an example of the ProductRef would be:
                {"value": "Hi Tea Chipper","name": "Product"},
                Out[5]:
                 Product
     Index
-    1037            Hi Tea Chipper
+    1037       Hi Tea Chipper
                """
 
-    reducer = kwargs.get('reducer', array_to_dict_reducer('Name', 'Value'))
+    reducer = kwargs.get('reducer', None)
     drop = kwargs.get('drop', True)
 
     def json_to_series(y):
@@ -234,9 +234,15 @@ def explode_json_to_cols(df, column_name, **kwargs):
             value = ast.literal_eval(y)
 
         if type(value) is dict:
-            return pd.Series(reduce(reducer, [value], {}))
+            if reducer is None:
+                return pd.Series(value)
+            else:
+                return pd.Series(reduce(reducer, [value], {}))
         if type(value) is list:
-            return pd.Series(reduce(reducer, value, {}))
+            if reducer is None:
+                return pd.Series(reduce(array_to_dict_reducer(), value, {}))
+            else:
+                return pd.Series(reduce(reducer, value, {}))
         else:
             return pd.Series([])
 
@@ -251,7 +257,7 @@ def explode_json_to_cols(df, column_name, **kwargs):
     return df
 
 
-def array_to_dict_reducer(key_prop, value_prop):
+def array_to_dict_reducer(key_prop=None, value_prop=None):
     """
     Convert an array into a dictionary
 
@@ -260,15 +266,18 @@ def array_to_dict_reducer(key_prop, value_prop):
     :return: a dictionary that has all the accumulated values
 
     """
-
     def reducer(accumulator, current_value):
         if type(current_value) is not dict:
             raise AttributeError("Value being reduced must be a dictionary")
 
-        key = current_value.get(key_prop)
-        current_value = current_value.get(value_prop)
+        if key_prop is not None and value_prop is not None:
+            key = current_value.get(key_prop)
+            current_value = current_value.get(value_prop)
+            accumulator[key] = current_value
+        else:
+            for key, value in current_value.items():
+                accumulator[key] = value
 
-        accumulator[key] = current_value
         return accumulator
 
     return reducer

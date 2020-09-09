@@ -33,6 +33,22 @@ class TestETL(object):
         assert df2.equals(expected_df)
         print("test_explode_json_to_cols output is correct")
 
+    def test_explode_json_to_cols_unique(self):
+        print("=====")
+        print("test_explode_json_to_cols_unique")
+
+        # Read data
+        dirname = os.path.dirname(__file__)
+        df = pd.read_excel(os.path.join(dirname, 'data/input/json_to_cols_unique.xlsx'), index_col=0)
+        expected_df = pd.read_csv(os.path.join(dirname, 'data/output/json_to_cols_unique.csv'), index_col=0)
+
+        # Explode
+        df2 = gs.explode_json_to_cols(df, "Metadata")
+        print(df2)
+
+        assert df2.equals(expected_df)
+        print("test_explode_json_to_cols_unique output is correct")
+
     # Run explode_json_to_rows
     def test_explode_json_to_rows(self):
         print("=====")
