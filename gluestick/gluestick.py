@@ -43,8 +43,6 @@ def read_csv_folder(path, converters={}, index_cols={}):
     for file in all_files:
         split_path = file.split('/')
         entity_type = split_path[len(split_path) - 1].split('.csv')[0]
-        if '_' in entity_type:
-            entity_type = entity_type.split('_')[0]
 
         if '-' in entity_type:
             entity_type = entity_type.split('-')[0]
