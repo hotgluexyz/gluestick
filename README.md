@@ -1,13 +1,12 @@
-gluestick [![Build Status](https://travis-ci.org/hotgluexyz/gluestick.svg?branch=master)](https://travis-ci.org/hotgluexyz/gluestick)
+gluegun [![Build Status](https://travis-ci.org/hotgluexyz/gluegun.svg?branch=master)](https://travis-ci.org/hotgluexyz/gluegun)
 =============
 
-A small Python module containing quick utility functions for standard 
-ETL processes.
+A small Python module containing quick utility functions for standard ETL processes.
 
 ## Installation ##
 
 ```
-pip install gluestick
+pip install gluegun
 ```
 
 ## Links ##

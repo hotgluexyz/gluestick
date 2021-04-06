@@ -97,10 +97,7 @@ def json_tuple_to_cols(df, column_name, col_config={'cols': {'key_prop': 'Name',
 
 def rename(df, target_columns):
     """
-       Renames columns in DataFrame using a json format
-
-      NOTE: Other version of this method (https://github.com/hsyyid/hotglue/blob/master/etlutils/etlutils/ETLUtils.py#L577)
-      also allow for converting the types of the values
+       Renames columns in DataFrame using a json format. Also allow for converting the types of the values
 
        Parameters
        ----------
