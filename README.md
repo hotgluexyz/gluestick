@@ -30,9 +30,9 @@ community via issues and pull requests.
 If you wish to chat with our team, feel free to join our [Slack]!
 
 
-[Source]: https://github.com/hotgluexyz/gluestick
-[Wiki]: https://github.com/hotgluexyz/gluestick/wiki
-[Issues]: https://github.com/hotgluexyz/gluestick/issues
+[Source]: https://github.com/hotgluexyz/gluegun
+[Wiki]: https://github.com/hotgluexyz/gluegun/wiki
+[Issues]: https://github.com/hotgluexyz/gluegun/issues
 [MIT]: https://tldrlegal.com/license/mit-license
 [hotglue]: https://hotglue.xyz
 [Slack]: https://bit.ly/2KBGGq1
