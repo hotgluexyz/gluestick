@@ -2,10 +2,10 @@ import pytest
 import os
 import pandas as pd
 
-import gluegun
+import gluestick
 
 
-# Tests gluegun ETL utilities
+# Tests gluestick ETL utilities
 class TestETL(object):
 
     @classmethod
@@ -26,8 +26,8 @@ class TestETL(object):
         expected_df = pd.read_csv(os.path.join(dirname, 'data/output/json_to_cols.csv'), index_col=0)
 
         # Explode
-        r = gluegun.array_to_dict_reducer('Name', 'StringValue')
-        df2 = gluegun.explode_json_to_cols(df, "Metadata", reducer=r)
+        r = gluestick.array_to_dict_reducer('Name', 'StringValue')
+        df2 = gluestick.explode_json_to_cols(df, "Metadata", reducer=r)
         print(df2)
 
         assert df2.equals(expected_df)
@@ -43,7 +43,7 @@ class TestETL(object):
         expected_df = pd.read_csv(os.path.join(dirname, 'data/output/json_to_cols_unique.csv'), index_col=0)
 
         # Explode
-        df2 = gluegun.explode_json_to_cols(df, "Metadata")
+        df2 = gluestick.explode_json_to_cols(df, "Metadata")
         print(df2)
 
         assert df2.equals(expected_df)
@@ -61,7 +61,7 @@ class TestETL(object):
             {'Line Detail.Id': 'float64'})
 
         # Explode
-        df2 = gluegun.explode_json_to_rows(df, "Line Detail").astype({'Line Detail.Id': 'float64'})
+        df2 = gluestick.explode_json_to_rows(df, "Line Detail").astype({'Line Detail.Id': 'float64'})
         assert df2.equals(expected_df)
         print("test_explode_json_to_rows output is correct")
 
@@ -78,9 +78,9 @@ class TestETL(object):
                        )
 
         transformed_df = (df
-                          .pipe(gluegun.explode_json_to_cols, "Metadata",
-                                reducer=gluegun.array_to_dict_reducer('Name', 'StringValue'))
-                          .pipe(gluegun.explode_json_to_rows, "LineDetail")
+                          .pipe(gluestick.explode_json_to_cols, "Metadata",
+                                reducer=gluestick.array_to_dict_reducer('Name', 'StringValue'))
+                          .pipe(gluestick.explode_json_to_rows, "LineDetail")
                           .pipe(lambda x: x.astype({'LineDetail.Id': 'float64'}))
                           .pipe(lambda x: x.sort_index(axis=1))
                           )
@@ -88,9 +88,9 @@ class TestETL(object):
 
         # changing order should not matter
         transformed_df = (df
-                          .pipe(gluegun.explode_json_to_rows, "LineDetail")
-                          .pipe(gluegun.explode_json_to_cols, "Metadata",
-                                reducer=gluegun.array_to_dict_reducer('Name', 'StringValue'))
+                          .pipe(gluestick.explode_json_to_rows, "LineDetail")
+                          .pipe(gluestick.explode_json_to_cols, "Metadata",
+                                reducer=gluestick.array_to_dict_reducer('Name', 'StringValue'))
                           .pipe(lambda x: x.astype({'LineDetail.Id': 'float64'}))
                           .pipe(lambda x: x.sort_index(axis=1))
                           )
