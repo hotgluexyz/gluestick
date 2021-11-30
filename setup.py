@@ -12,8 +12,8 @@ setup(
     url='https://github.com/hotgluexyz/gluestick',
     install_requires=[
         'xlrd==1.2.0',
-        'numpy>=1.14.3',
-        'pandas>=0.23.0',
+        'numpy',
+        'pandas',
     ],
     author='hotglue',
     author_email='hello@hotglue.xyz',
