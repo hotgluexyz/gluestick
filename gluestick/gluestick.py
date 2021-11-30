@@ -2,6 +2,7 @@ from functools import reduce
 import pandas as pd
 import ast
 import os
+import json
 from pandas.io.json._normalize import nested_to_record
 
 
@@ -165,9 +166,9 @@ Index
     # Explode to new rows
     max_level = kwargs.get("max_level", 1)
 
-    def to_list(y):
+    def to_list(y, parser=ast.literal_eval):
         if type(y) is str:
-            y = ast.literal_eval(y)
+            y = parser(y)
 
         if type(y) is not list:
             y = [y]
@@ -180,7 +181,8 @@ Index
         else:
             return pd.Series()
 
-    df[column_name] = df[column_name].apply(to_list)
+    parser = kwargs.get("parser", ast.literal_eval)
+    df[column_name] = df[column_name].apply(to_list, parser=parser)
 
     ip_df = df.explode(column_name)
 
@@ -223,10 +225,10 @@ def explode_json_to_cols(df, column_name, **kwargs):
     reducer = kwargs.get('reducer', None)
     drop = kwargs.get('drop', True)
 
-    def json_to_series(y):
+    def json_to_series(y, parser=ast.literal_eval):
         value = y
         if type(value) is str:
-            value = ast.literal_eval(y)
+            value = parser(y)
 
         if type(value) is dict:
             if reducer is None:
@@ -241,7 +243,8 @@ def explode_json_to_cols(df, column_name, **kwargs):
         else:
             return pd.Series([])
 
-    new_df = df[column_name].apply(json_to_series).add_prefix(f"{column_name}.")
+    parser = kwargs.get("parser", ast.literal_eval)
+    new_df = df[column_name].apply(json_to_series, parser=parser).add_prefix(f"{column_name}.")
     new_df = new_df[~new_df.index.duplicated(keep='first')]
 
     if drop:
