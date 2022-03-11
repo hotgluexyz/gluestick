@@ -1,5 +1,6 @@
 from functools import reduce
 import pandas as pd
+import numpy as np
 import ast
 import os
 import json
@@ -179,7 +180,7 @@ Index
         if type(y) is dict:
             return pd.Series(nested_to_record(y, sep='.', max_level=max_level))
         else:
-            return pd.Series()
+            return pd.Series(dtype=np.float64)
 
     parser = kwargs.get("parser", ast.literal_eval)
     df[column_name] = df[column_name].apply(to_list, parser=parser)
@@ -188,7 +189,7 @@ Index
 
     final_df = pd.concat([ip_df, ip_df[column_name].apply(flatten).add_prefix(f"{column_name}.")], axis=1)
     if drop:
-        final_df = final_df.drop(column_name, 1)
+        final_df = final_df.drop(column_name, axis=1)
 
     return final_df
 
