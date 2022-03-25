@@ -1,4 +1,5 @@
 from functools import reduce
+import numpy as np
 import pandas as pd
 import numpy as np
 import ast
@@ -185,13 +186,13 @@ Index
     parser = kwargs.get("parser", ast.literal_eval)
     df[column_name] = df[column_name].apply(to_list, parser=parser)
 
-    ip_df = df.explode(column_name)
+    df = df.explode(column_name)
 
-    final_df = pd.concat([ip_df, ip_df[column_name].apply(flatten).add_prefix(f"{column_name}.")], axis=1)
+    df = pd.concat([df, df[column_name].apply(flatten).add_prefix(f"{column_name}.")], axis=1)
     if drop:
-        final_df = final_df.drop(column_name, axis=1)
+        df.drop(column_name, axis=1, inplace=True)
 
-    return final_df
+    return df
 
 
 def explode_json_to_cols(df, column_name, **kwargs):
