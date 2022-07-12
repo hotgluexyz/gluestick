@@ -5,13 +5,14 @@ with open("README.md", "r") as fh:
 
 setup(
     name='gluestick',
-    version='1.0.7',
+    version='1.0.8',
     description='ETL utility functions built on Pandas',
     long_description=long_description,
     long_description_content_type="text/markdown",
     url='https://github.com/hotgluexyz/gluestick',
     install_requires=[
         'xlrd==1.2.0',
+        'singer-python>=4.0.0',
         'numpy',
         'pandas',
     ],
