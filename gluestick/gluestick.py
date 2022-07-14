@@ -343,8 +343,9 @@ def gen_singer_header(df):
     return header_map
 
 
-def to_singer(df, stream, output, keys=[]):
+def to_singer(df, stream, output_dir, keys=[], filename="data.singer"):
     header_map = gen_singer_header(df)
+    output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
     with open(output, mode) as f:
         with redirect_stdout(f):
@@ -353,5 +354,5 @@ def to_singer(df, stream, output, keys=[]):
                 for i, row in df.iterrows():
                     filtered_row = row.dropna().to_dict()
                     rec = transformer.transform(filtered_row, header_map)
-                    singer.write_record(stream, filtered_row)
+                    singer.write_record(stream, rec)
                 singer.write_state({})
