@@ -1,11 +1,13 @@
-from functools import reduce
-import numpy as np
-import pandas as pd
-import numpy as np
 import ast
 import os
-import json
+from contextlib import redirect_stdout
+from functools import reduce
+
+import numpy as np
+import pandas as pd
+import singer
 from pandas.io.json._normalize import nested_to_record
+from singer import Transformer
 
 
 def read_csv_folder(path, converters={}, index_cols={}):
@@ -281,3 +283,75 @@ def array_to_dict_reducer(key_prop=None, value_prop=None):
         return accumulator
 
     return reducer
+
+
+def to_singer_schema(input):
+    if type(input) == dict:
+        property = dict(type=["object", "null"], properties={})
+        for k, v in input.items():
+            property["properties"][k] = to_singer_schema(v)
+        return property
+    elif type(input) == list:
+        if len(input):
+            return dict(type=["array", "null"], items=to_singer_schema(input[0]))
+        else:
+            return {"items": {"type": ["object", "integer", "string"]}, "type": ["array", "null"]}
+    elif type(input) == bool:
+        return {"type": ["boolean", "null"]}
+    elif type(input) == int:
+        return {"type": ["integer", "null"]}
+    elif type(input) == float:
+        return {"type": ["number", "null"]}
+    return {"type": ["string", "null"]}
+
+
+def gen_singer_header(df):
+    header_map = dict(type=["object", "null"], properties={})
+
+    for col in df.columns:
+        dtype = df[col].dtype.__str__()
+        if "float" in dtype:
+            header_map["properties"][col] = {"type": ["number", "null"]}
+        elif "int" in dtype:
+            header_map["properties"][col] = {"type": ["integer", "null"]}
+        elif "bool" in dtype:
+            header_map["properties"][col] = {"type": ["boolean", "null"]}
+        elif "date" in dtype:
+            df[col] = df[col].dt.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            header_map["properties"][col] = {"format": "date-time", "type": ["string", "null"]}
+        else:
+            value = df[col].dropna()
+            if value.empty:
+                header_map["properties"][col] = {"type": ["string", "null"]}
+                continue
+            else:
+                first_value = value.iloc[0]
+            
+            if isinstance(first_value, list):
+                if len(first_value):
+                    schema = dict(type=["array", "null"], items=to_singer_schema(first_value[0]))
+                    header_map["properties"][col] = schema
+                else:
+                    header_map["properties"][col] = {"items": {"type": ["object", "integer", "string"]}, "type": ["array", "null"]}
+            elif isinstance(first_value, dict):
+                schema = dict(type=["object", "null"], properties={})
+                for k, v in first_value.items():
+                    schema["properties"][k] = to_singer_schema(v)
+                header_map["properties"][col] = schema
+            else:
+                header_map["properties"][col] = {"type": ["string", "null"]}
+    return header_map
+
+
+def to_singer(df, stream, output, keys=[]):
+    header_map = gen_singer_header(df)
+    mode = "a" if os.path.isfile(output) else "w"
+    with open(output, mode) as f:
+        with redirect_stdout(f):
+            singer.write_schema(stream, header_map, keys)
+            with Transformer() as transformer:
+                for i, row in df.iterrows():
+                    filtered_row = row.dropna().to_dict()
+                    rec = transformer.transform(filtered_row, header_map)
+                    singer.write_record(stream, filtered_row)
+                singer.write_state({})
