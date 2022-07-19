@@ -197,7 +197,7 @@ Index
     return df
 
 
-def explode_json_to_cols(df, column_name, **kwargs):
+def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
     """
               Converts a JSON column that has an array value such as  [{"Name": "First", "Value": "John"},
               {"Name": "Last", "Value": "Smith"}] into a data_frame with a column for each value. Note that the new series
@@ -226,35 +226,32 @@ def explode_json_to_cols(df, column_name, **kwargs):
     1037       Hi Tea Chipper
                """
 
-    reducer = kwargs.get('reducer', None)
     drop = kwargs.get('drop', True)
+    
+    if not kwargs.get('inplace'):
+        df = df.copy()
 
-    def json_to_series(y, parser=ast.literal_eval):
-        value = y
-        if type(value) is str:
-            value = parser(y)
-
-        if type(value) is dict:
-            if reducer is None:
-                return pd.Series(value)
-            else:
-                return pd.Series(reduce(reducer, [value], {}))
-        if type(value) is list:
-            if reducer is None:
-                return pd.Series(reduce(array_to_dict_reducer(), value, {}))
-            else:
-                return pd.Series(reduce(reducer, value, {}))
-        else:
-            return pd.Series([])
-
+    df[column_name] = df[column_name].fillna("{}")
     parser = kwargs.get("parser", ast.literal_eval)
-    new_df = df[column_name].apply(json_to_series, parser=parser).add_prefix(f"{column_name}.")
-    new_df = new_df[~new_df.index.duplicated(keep='first')]
+
+    df[column_name] = df[column_name].apply(lambda x: parser(x) if isinstance(x, str) else x)
+
+    cols = df[column_name].apply(lambda x: x.keys()).explode().unique().tolist()
+    default_dict = {c:np.nan for c in cols}
+    cols = [f"{column_name}.{col}" for col in cols]
+
+    def set_default_dict(object, default_dict):
+        if isinstance(object, dict):
+            for k, v in default_dict.items():
+                object.setdefault(k, v)
+            return object
+        return np.nan
+
+    df[column_name] = df[column_name].apply(lambda x: set_default_dict(x, default_dict))
+    df[cols] = df[column_name].apply(pd.Series)
 
     if drop:
         df = df.drop(column_name, 1)
-
-    df = df.join(new_df, how='inner')
 
     return df
 
