@@ -293,7 +293,7 @@ def to_singer_schema(input):
         if len(input):
             return dict(type=["array", "null"], items=to_singer_schema(input[0]))
         else:
-            return {"items": {"type": ["object", "integer", "string"]}, "type": ["array", "null"]}
+            return {"items": {"type": ["string", "null"]}, "type": ["array", "null"]}
     elif type(input) == bool:
         return {"type": ["boolean", "null"]}
     elif type(input) == int:
@@ -330,7 +330,7 @@ def gen_singer_header(df):
                     schema = dict(type=["array", "null"], items=to_singer_schema(first_value[0]))
                     header_map["properties"][col] = schema
                 else:
-                    header_map["properties"][col] = {"items": {"type": ["object", "integer", "string"]}, "type": ["array", "null"]}
+                    header_map["properties"][col] = {"items": {"type": ["string", "null"]}, "type": ["array", "null"]}
             elif isinstance(first_value, dict):
                 schema = dict(type=["object", "null"], properties={})
                 for k, v in first_value.items():
