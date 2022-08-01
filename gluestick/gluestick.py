@@ -237,6 +237,7 @@ def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
     df[column_name] = df[column_name].apply(lambda x: parser(x) if isinstance(x, str) else x)
 
     cols = df[column_name].apply(lambda x: x.keys()).explode().unique().tolist()
+    cols = [x for x in cols if x == x]
     default_dict = {c:np.nan for c in cols}
     cols = [f"{column_name}.{col}" for col in cols]
 
@@ -340,7 +341,15 @@ def gen_singer_header(df):
     return header_map
 
 
-def to_singer(df, stream, output_dir, keys=[], filename="data.singer"):
+def to_singer(df: pd.DataFrame, stream, output_dir, keys=[], filename="data.singer"):
+    """
+    Convert a pandas DataFrame into a singer file
+
+    :param df: input DataFrame
+    :param stream: stream name to be used in the singer output file
+    :output_dir: path to the output directory
+    :keys: the primary-keys to be used
+    """
     header_map = gen_singer_header(df)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
@@ -353,3 +362,30 @@ def to_singer(df, stream, output_dir, keys=[], filename="data.singer"):
                     rec = transformer.transform(filtered_row, header_map)
                     singer.write_record(stream, rec)
                 singer.write_state({})
+
+
+def snapshot_records(stream_data, stream, snapshot_dir, pk="id"):
+    """
+    Update a snapshot file
+
+    :param stream_data: input DataFrame with the data to be included in the snapshot
+    :param stream: stream name to be used as snapshot file name
+    :snapshot_dir: path to the snapshots directory
+    :pk: the primary key
+    :return: DataFrame with all the data
+    """
+    if os.path.isfile(f'{snapshot_dir}/{stream}.snapshot.csv') :
+        snapshot = pd.read_csv(f'{snapshot_dir}/{stream}.snapshot.csv')
+    else:
+        snapshot = None
+
+    if stream_data is not None and snapshot is not None:
+        stream_data = pd.concat([snapshot, stream_data])
+        stream_data = stream_data.drop_duplicates(pk, keep="last")
+        stream_data.to_csv(f'{snapshot_dir}/{stream}.snapshot.csv', index=False)
+    elif stream_data is not None and snapshot is None:
+        stream_data.to_csv(f'{snapshot_dir}/{stream}.snapshot.csv', index=False)
+    else:
+        stream_data = snapshot
+    
+    return stream_data
