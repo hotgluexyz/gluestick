@@ -1,5 +1,6 @@
 import ast
 import os
+import json
 from contextlib import redirect_stdout
 from functools import reduce
 
@@ -303,11 +304,11 @@ def to_singer_schema(input):
     return {"type": ["string", "null"]}
 
 
-def gen_singer_header(df):
+def gen_singer_header(df, allow_objects):
     header_map = dict(type=["object", "null"], properties={})
 
     for col in df.columns:
-        dtype = df[col].dtype.__str__()
+        dtype = df[col].dtype.__str__().lower()
         if "float" in dtype:
             header_map["properties"][col] = {"type": ["number", "null"]}
         elif "int" in dtype:
@@ -317,7 +318,7 @@ def gen_singer_header(df):
         elif "date" in dtype:
             df[col] = df[col].dt.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             header_map["properties"][col] = {"format": "date-time", "type": ["string", "null"]}
-        else:
+        elif allow_objects:
             value = df[col].dropna()
             if value.empty:
                 header_map["properties"][col] = {"type": ["string", "null"]}
@@ -338,10 +339,23 @@ def gen_singer_header(df):
                 header_map["properties"][col] = schema
             else:
                 header_map["properties"][col] = {"type": ["string", "null"]}
-    return header_map
+        else:
+            header_map["properties"][col] = {"type": ["string", "null"]}
+
+            def check_null(x):
+                try:
+                    if isinstance(x, list) or isinstance(x, dict):
+                        return json.dumps(x, default=str)
+                    elif not pd.isna(x):
+                        return str(x)
+                    return x
+                except:
+                    return str(x)
+            df[col] = df[col].apply(check_null)
+    return df, header_map
 
 
-def to_singer(df: pd.DataFrame, stream, output_dir, keys=[], filename="data.singer"):
+def to_singer(df: pd.DataFrame, stream, output_dir, keys=[], filename="data.singer", allow_objects=False):
     """
     Convert a pandas DataFrame into a singer file
 
@@ -349,8 +363,11 @@ def to_singer(df: pd.DataFrame, stream, output_dir, keys=[], filename="data.sing
     :param stream: stream name to be used in the singer output file
     :output_dir: path to the output directory
     :keys: the primary-keys to be used
+    :allow_objects: allow or not objects to the parsed, if false defaults types to str
     """
-    header_map = gen_singer_header(df)
+    if allow_objects:
+        df = df.dropna(how="all", axis=1)
+    df, header_map = gen_singer_header(df, allow_objects)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
     with open(output, mode) as f:
