@@ -11,7 +11,7 @@ from pandas.io.json._normalize import nested_to_record
 from singer import Transformer
 
 
-def read_csv_folder(path, converters={}, index_cols={}):
+def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
     """
     Convenience method to read a set of CSV files in a folder, based on the read_csv(). This method assumes that the
     files are being pulled in a stream and follow a naming convention with the stream/ entity / table name is the first
@@ -22,6 +22,8 @@ def read_csv_folder(path, converters={}, index_cols={}):
     read_csv, the key of the dictionary is the name of the entity.
     :param index_cols: a dictionary with an array of
     index_cols, the key of the dictionary is the name of the entity.
+
+    ignore = [...] -> List of files to ignore
 
     :return: a dict of pandas.DataFrames. the keys of which are the entity names
 
@@ -44,7 +46,7 @@ def read_csv_folder(path, converters={}, index_cols={}):
     else:
         all_files.append(path)
 
-    # print(f"Collecting data for {all_files}")
+    #print(f"Collecting data for {all_files}")
 
     for file in all_files:
         split_path = file.split('/')
@@ -53,8 +55,8 @@ def read_csv_folder(path, converters={}, index_cols={}):
         if '-' in entity_type:
             entity_type = entity_type.split('-')[0]
 
-        if entity_type not in results:
-            # print(f"Reading file of type {entity_type} in the data file {file}")
+        if entity_type not in results and entity_type not in ignore:
+            #print(f"Reading file of type {entity_type} in the data file {file}")
             results[entity_type] = pd.read_csv(file, index_col=index_cols.get(entity_type),
                                                converters=converters.get(entity_type))
 
