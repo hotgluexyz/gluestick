@@ -56,7 +56,7 @@ def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
             entity_type = entity_type.split('-')[0]
 
         if entity_type not in results and entity_type not in ignore:
-            print(f"Reading file of type {entity_type} in the data file {file}")
+            #print(f"Reading file of type {entity_type} in the data file {file}")
             results[entity_type] = pd.read_csv(file, index_col=index_cols.get(entity_type),
                                                converters=converters.get(entity_type))
 
