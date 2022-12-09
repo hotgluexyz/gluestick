@@ -321,6 +321,7 @@ def gen_singer_header(df, allow_objects):
             df[col] = df[col].dt.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             header_map["properties"][col] = {"format": "date-time", "type": ["string", "null"]}
         elif allow_objects:
+
             value = df[col].dropna()
             if value.empty:
                 header_map["properties"][col] = {"type": ["string", "null"]}
@@ -367,8 +368,6 @@ def to_singer(df: pd.DataFrame, stream, output_dir, keys=[], filename="data.sing
     :keys: the primary-keys to be used
     :allow_objects: allow or not objects to the parsed, if false defaults types to str
     """
-    if allow_objects:
-        df = df.dropna(how="all", axis=1)
     df, header_map = gen_singer_header(df, allow_objects)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
