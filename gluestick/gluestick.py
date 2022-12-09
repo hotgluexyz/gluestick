@@ -357,7 +357,7 @@ def gen_singer_header(df, allow_objects):
     return df, header_map
 
 
-def to_singer(df: pd.DataFrame, stream, output_dir, keys=[], filename="data.singer", allow_objects=False):
+def to_singer(df: pd.DataFrame, stream, output_dir, keys=[], filename="data.singer", allow_objects=False, force_empty=[]):
     """
     Convert a pandas DataFrame into a singer file
 
@@ -369,6 +369,12 @@ def to_singer(df: pd.DataFrame, stream, output_dir, keys=[], filename="data.sing
     """
     if allow_objects:
         df = df.dropna(how="all", axis=1)
+    if force_empty:
+        if isinstance(force_empty, str):
+            df[force_empty] = np.nan
+        else:
+            for c in force_empty:
+                df[c] = np.nan
     df, header_map = gen_singer_header(df, allow_objects)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
