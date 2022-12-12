@@ -371,10 +371,12 @@ def to_singer(df: pd.DataFrame, stream, output_dir, keys=[], filename="data.sing
         df = df.dropna(how="all", axis=1)
     if force_empty:
         if isinstance(force_empty, str):
-            df[force_empty] = np.nan
+            if force_empty not in df.columns:
+                df[force_empty] = np.nan
         else:
             for c in force_empty:
-                df[c] = np.nan
+                if c not in df.columns:
+                    df[c] = np.nan
     df, header_map = gen_singer_header(df, allow_objects)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
