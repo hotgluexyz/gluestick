@@ -31,6 +31,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool):
         "float": {"type": ["number", "null"]},
         "int": {"type": ["integer", "null"]},
         "bool": {"type": ["boolean", "null"]},
+        "str": {"type": ["string", "null"]},
         "date": {
             "format": "date-time",
             "type": ["string", "null"],
