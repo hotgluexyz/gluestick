@@ -203,12 +203,19 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False):
     """
     df = df.copy()
 
+    if pk:
+        # PK needs to be unique, so we drop the duplicated values
+        df = df.drop_duplicates(subset=pk)
+
     df["hash"] = df.apply(get_row_hash, axis=1)
     # If there is a snapshot file compare and filter the hashs
     if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.csv"):
         pk = [pk] if not isinstance(pk, list) else pk
 
         hash_df = pd.read_csv(f"{output_dir}/{name}.hash.snapshot.csv")
+
+        if pk:
+            hash_df = hash_df.drop_duplicates(subset=pk)
 
         if updated_flag and pk:
             updated_pk = df[pk]
