@@ -1,8 +1,8 @@
-import pytest
 import os
-import pandas as pd
 
 import gluestick
+import pandas as pd
+import pytest
 
 
 # Tests gluestick ETL utilities

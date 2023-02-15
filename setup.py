@@ -14,7 +14,7 @@ setup(
         "singer-python>=4.0.0",
         "numpy>=1.4",
         "pandas>=1.2.5",
-        "pyarrow>=8.0.0"
+        "pyarrow>=8.0.0",
     ],
     author="hotglue",
     author_email="hello@hotglue.xyz",

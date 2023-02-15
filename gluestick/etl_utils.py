@@ -5,6 +5,7 @@ import json
 import os
 
 import pandas as pd
+import pyarrow.parquet as pq
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -129,7 +130,7 @@ def read_parquet_folder(path, ignore=[]):
             entity_type = entity_type.rsplit("-", 1)[0]
 
         if entity_type not in results and entity_type not in ignore:
-            results[entity_type] = pd.read_parquet(file)
+            results[entity_type] = pd.read_parquet(file, use_nullable_dtypes=True)
 
     return results
 
@@ -323,12 +324,22 @@ class Reader:
         if not filepath:
             return default
         if filepath.endswith(".parquet"):
-            return pd.read_parquet(filepath, **kwargs)
+            return pd.read_parquet(filepath, use_nullable_dtypes=True, **kwargs)
         catalog = self.read_catalog()
         if catalog and catalog_types:
             types_params = self.get_types_from_catalog(catalog, stream)
             kwargs.update(types_params)
         return pd.read_csv(filepath, **kwargs)
+
+    def get_metadata(self, stream):
+        """Get metadata from parquet file."""
+        file = self.input_files.get(stream)
+        if file.endswith(".parquet"):
+            return {
+                k.decode(): v.decode()
+                for k, v in pq.read_metadata(file).metadata.items()
+            }
+        return {}
 
     def read_directories(self, ignore=[]):
         """Read all the available directories for input files.
