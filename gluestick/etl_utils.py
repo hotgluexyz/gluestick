@@ -5,6 +5,7 @@ import json
 import os
 
 import pandas as pd
+import pyarrow.parquet as pq
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -64,10 +65,10 @@ def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
 
     for file in all_files:
         split_path = file.split("/")
-        entity_type = split_path[len(split_path) - 1].split(".csv")[0]
+        entity_type = split_path[len(split_path) - 1].rsplit(".csv", 1)[0]
 
         if "-" in entity_type:
-            entity_type = entity_type.split("-")[0]
+            entity_type = entity_type.rsplit("-", 1)[0]
 
         if entity_type not in results and entity_type not in ignore:
             # print(f"Reading file of type {entity_type} in the data file {file}")
@@ -76,6 +77,60 @@ def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
                 index_col=index_cols.get(entity_type),
                 converters=converters.get(entity_type),
             )
+
+    return results
+
+
+def read_parquet_folder(path, ignore=[]):
+    """Read a set of parquet files in a folder using read_parquet().
+
+    Notes
+    -----
+    This method assumes that the files are being pulled in a stream and follow a
+    naming convention with the stream/ entity / table name is the first word in the
+    file name for example; Account-20200811T121507.parquet is for an entity called
+    ``Account``.
+
+    Parameters
+    ----------
+    path: str
+        The folder directory
+    ignore: list
+        List of files to ignore
+
+    Returns
+    -------
+    return: dict
+        Dict of pandas.DataFrames. the keys of which are the entity names
+
+    Examples
+    --------
+    IN[31]: entity_data = read_parquet_folder(PARQUET_FOLDER_PATH)
+    IN[32]: df = entity_data['Account']
+
+    """
+    is_directory = os.path.isdir(path)
+    all_files = []
+    results = {}
+    if is_directory:
+        for entry in os.listdir(path):
+            if os.path.isfile(os.path.join(path, entry)) and os.path.join(
+                path, entry
+            ).endswith(".parquet"):
+                all_files.append(os.path.join(path, entry))
+
+    else:
+        all_files.append(path)
+
+    for file in all_files:
+        split_path = file.split("/")
+        entity_type = split_path[len(split_path) - 1].rsplit(".parquet", 1)[0]
+
+        if "-" in entity_type:
+            entity_type = entity_type.rsplit("-", 1)[0]
+
+        if entity_type not in results and entity_type not in ignore:
+            results[entity_type] = pd.read_parquet(file, use_nullable_dtypes=True)
 
     return results
 
@@ -268,11 +323,23 @@ class Reader:
         filepath = self.input_files.get(stream)
         if not filepath:
             return default
+        if filepath.endswith(".parquet"):
+            return pd.read_parquet(filepath, use_nullable_dtypes=True, **kwargs)
         catalog = self.read_catalog()
         if catalog and catalog_types:
             types_params = self.get_types_from_catalog(catalog, stream)
             kwargs.update(types_params)
         return pd.read_csv(filepath, **kwargs)
+
+    def get_metadata(self, stream):
+        """Get metadata from parquet file."""
+        file = self.input_files.get(stream)
+        if file.endswith(".parquet"):
+            return {
+                k.decode(): v.decode()
+                for k, v in pq.read_metadata(file).metadata.items()
+            }
+        return {}
 
     def read_directories(self, ignore=[]):
         """Read all the available directories for input files.
@@ -293,19 +360,19 @@ class Reader:
         results = {}
         if is_directory:
             for entry in os.listdir(self.dir):
-                if os.path.isfile(os.path.join(self.dir, entry)) and os.path.join(
-                    self.dir, entry
-                ).endswith(".csv"):
-                    all_files.append(os.path.join(self.dir, entry))
+                file_path = os.path.join(self.dir, entry)
+                if os.path.isfile(file_path):
+                    if file_path.endswith(".csv") or file_path.endswith(".parquet"):
+                        all_files.append(file_path)
         else:
             all_files.append(self.dir)
 
         for file in all_files:
             split_path = file.split("/")
-            entity_type = split_path[len(split_path) - 1].split(".csv")[0]
+            entity_type = split_path[len(split_path) - 1].rsplit(".", 1)[0]
 
             if "-" in entity_type:
-                entity_type = entity_type.split("-")[0]
+                entity_type = entity_type.rsplit("-", 1)[0]
 
             if entity_type not in results and entity_type not in ignore:
                 results[entity_type] = file
