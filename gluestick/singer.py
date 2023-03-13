@@ -57,16 +57,22 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool):
                 first_value = value.iloc[0]
 
             if isinstance(first_value, list):
-                if len(first_value):
-                    schema = dict(
-                        type=["array", "null"], items=to_singer_schema(first_value[0])
-                    )
-                    header_map["properties"][col] = schema
-                else:
+                new_input = {}
+                for row in value:
+                    if len(row):
+                        for arr_value in row:
+                            if isinstance(arr_value, dict):
+                                temp_dict = {k:v for k, v in arr_value.items() if (k not in new_input.keys()) or isinstance(v, float)}
+                                new_input.update(temp_dict)
+                            else:
+                                new_input = arr_value        
+                schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
+                header_map["properties"][col] = schema
+                if not new_input:
                     header_map["properties"][col] = {
-                        "items": type_mapping["str"],
-                        "type": ["array", "null"],
-                    }
+                            "items": type_mapping["str"],
+                            "type": ["array", "null"],
+                        } 
             elif isinstance(first_value, dict):
                 schema = dict(type=["object", "null"], properties={})
                 for k, v in first_value.items():
