@@ -58,9 +58,10 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool):
 
             if isinstance(first_value, list):
                 if len(first_value):
-                    schema = dict(
-                        type=["array", "null"], items=to_singer_schema(first_value[0])
-                    )
+                    new_input = {}
+                    for i in first_value:
+                        new_input.update(i)
+                    schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
                     header_map["properties"][col] = schema
                 else:
                     header_map["properties"][col] = {
