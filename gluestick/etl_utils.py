@@ -154,7 +154,9 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
     """
     # Read snapshot file if it exists
-    if os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.csv"):
+    if os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.parquet"):
+        snapshot = pd.read_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", use_nullable_dtypes=True, **kwargs)
+    elif os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.csv"):
         snapshot = pd.read_csv(f"{snapshot_dir}/{stream}.snapshot.csv", **kwargs)
     else:
         snapshot = None
@@ -162,7 +164,7 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 
 def snapshot_records(
-    stream_data, stream, snapshot_dir, pk="id", just_new=False, **kwargs
+    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, **kwargs
 ):
     """Update a snapshot file.
 
@@ -194,13 +196,19 @@ def snapshot_records(
     if stream_data is not None and snapshot is not None:
         merged_data = pd.concat([snapshot, stream_data])
         merged_data = merged_data.drop_duplicates(pk, keep="last")
-        merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
+        if use_csv:
+            merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
+        else:
+            merged_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
         if not just_new:
             return merged_data
 
     # If there is no snapshot file snapshots and return the new data
     if stream_data is not None and snapshot is None:
-        stream_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
+        if use_csv:
+            stream_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
+        else:
+            stream_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
         return stream_data
 
     # If the new data is empty return snapshot
@@ -228,7 +236,7 @@ def get_row_hash(row):
     return hashlib.md5(row_str).hexdigest()
 
 
-def drop_redundant(df, name, output_dir, pk=[], updated_flag=False):
+def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=False):
     """Drop the rows that were present in previous versions of the dataframe.
 
     Notes
@@ -263,11 +271,15 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False):
         df = df.drop_duplicates(subset=pk)
 
     df["hash"] = df.apply(get_row_hash, axis=1)
-    # If there is a snapshot file compare and filter the hashs
-    if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.csv"):
-        pk = [pk] if not isinstance(pk, list) else pk
-
+    # If there is a snapshot file compare and filter the hash
+    hash_df = None
+    if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.parquet"):
+        hash_df = pd.read_parquet(f"{output_dir}/{name}.hash.snapshot.parquet")
+    elif os.path.isfile(f"{output_dir}/{name}.hash.snapshot.csv"):
         hash_df = pd.read_csv(f"{output_dir}/{name}.hash.snapshot.csv")
+
+    if hash_df is not None:
+        pk = [pk] if not isinstance(pk, list) else pk
 
         if pk:
             hash_df = hash_df.drop_duplicates(subset=pk)
@@ -281,9 +293,11 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False):
         )
         df = df[df["_merge"] == "left_only"]
         df = df.drop("_merge", axis=1)
-        df = df.merge(updated_pk, on=pk, how="left")
 
-    snapshot_records(df[pk + ["hash"]], f"{name}.hash", output_dir, pk)
+        if updated_flag and pk:
+            df = df.merge(updated_pk, on=pk, how="left")
+
+    snapshot_records(df[pk + ["hash"]], f"{name}.hash", output_dir, pk, use_csv=use_csv)
     df = df.drop("hash", axis=1)
     return df
 
@@ -334,12 +348,22 @@ class Reader:
     def get_metadata(self, stream):
         """Get metadata from parquet file."""
         file = self.input_files.get(stream)
+        if file is None:
+            raise FileNotFoundError(f"There is no file for stream with name {stream}.")
         if file.endswith(".parquet"):
             return {
                 k.decode(): v.decode()
                 for k, v in pq.read_metadata(file).metadata.items()
             }
         return {}
+
+    def get_pk(self, stream):
+        """Get pk from parquet file."""
+        metadata = self.get_metadata(stream)
+        if metadata.get("key_properties"):
+            return eval(metadata["key_properties"])
+        else:
+            return []
 
     def read_directories(self, ignore=[]):
         """Read all the available directories for input files.
