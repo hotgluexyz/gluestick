@@ -6,6 +6,7 @@ import os
 
 import pandas as pd
 import pyarrow.parquet as pq
+from datetime import datetime
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -300,6 +301,50 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
     snapshot_records(df[pk + ["hash"]], f"{name}.hash", output_dir, pk, use_csv=use_csv)
     df = df.drop("hash", axis=1)
     return df
+
+def clean_convert(input):
+    if isinstance(input, list):
+        return [clean_convert(i) for i in input]
+    elif isinstance(input, dict):
+        output = {}
+        for k, v in input.items():
+            v = clean_convert(v)
+            if isinstance(v, list):
+                output[k] = [i for i in v if not pd.isna(i)]
+            elif not pd.isna(v):
+                output[k] = v
+        return output
+    elif isinstance(input, datetime):
+        return input.isoformat()
+    elif not pd.isna(input):
+        return input
+
+def map_fields(row, mapping):
+    output = {}
+    for key, value in mapping.items():
+        if isinstance(value, list):
+            out_list = []
+            for v in value:
+                mapped = map_fields(row, v)
+                if mapped:
+                    out_list.append(mapped)
+            if out_list:
+                output[key] = out_list
+        elif isinstance(value, dict):
+            mapped = map_fields(row, value)
+            if mapped:
+                output[key] = mapped
+        elif value is not None:
+            if isinstance(row.get(value), list) or not pd.isna(row.get(value)):
+                output[key] = row.get(value)
+    return output
+
+def clean_obj_null_values(obj):
+    if not pd.isna(obj):
+        obj = obj.replace('null', 'None')
+        return obj
+    else:
+        return {}
 
 
 class Reader:
