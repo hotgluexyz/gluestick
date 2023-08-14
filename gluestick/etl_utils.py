@@ -303,6 +303,24 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
     return df
 
 def clean_convert(input):
+    """Cleans all None values from a list or dict.
+
+    Notes
+    -----
+    This function will iterate through all the values of a list or dict 
+    and delete all None values 
+
+    Parameters
+    ----------
+    input: dict, list
+        The dict or list that will be cleaned.
+
+    Returns
+    -------
+    return: dict, list
+        list or dict with the data after deleting all None values.
+
+    """
     if isinstance(input, list):
         return [clean_convert(i) for i in input]
     elif isinstance(input, dict):
@@ -320,6 +338,24 @@ def clean_convert(input):
         return input
 
 def map_fields(row, mapping):
+    """Maps the row values according to the mapping dict.
+
+    Notes
+    -----
+    This function will iterate through all the values of a mapping dict
+    and map the values from the row accordingly
+
+    Parameters
+    ----------
+    row: dict or dataframe row with the values to be mapped
+    mapping: dict that estabilsh how to map the fields
+
+    Returns
+    -------
+    return: dict
+        dict with the mapped data.
+
+    """
     output = {}
     for key, value in mapping.items():
         if isinstance(value, list):
@@ -340,6 +376,24 @@ def map_fields(row, mapping):
     return output
 
 def clean_obj_null_values(obj):
+    """Replaces all null values by None.
+
+    Notes
+    -----
+    This function will replace all null values by None so other functions 
+    such as explode_json_to_cols, explode_json_to_rows, etc can be used
+
+    Parameters
+    ----------
+    obj: str
+        stringified dict or list where null values should be replaced.
+
+    Returns
+    -------
+    return: str
+        str with all null values replaced.
+
+    """
     if not pd.isna(obj):
         obj = obj.replace('null', 'None')
         return obj
