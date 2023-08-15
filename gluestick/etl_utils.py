@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import pyarrow.parquet as pq
 from datetime import datetime
+import ast
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -399,6 +400,29 @@ def clean_obj_null_values(obj):
         return obj
     else:
         return {}
+
+def parse_objs(x):
+    """Parse a stringified dict or list of dicts.
+
+    Notes
+    -----
+    This function will parse a stringified dict or list of dicts
+
+    Parameters
+    ----------
+    x: str
+        stringified dict or list of dicts.
+
+    Returns
+    -------
+    return: dict, list
+        parsed dict or list of dicts.
+
+    """
+    try:
+        return ast.literal_eval(x)
+    except:
+        return json.loads(x)
 
 
 class Reader:
