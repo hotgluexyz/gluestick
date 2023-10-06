@@ -558,7 +558,7 @@ class Reader:
         streams = next(c for c in catalog["streams"] if c["stream"] == stream)
         types = streams["schema"]["properties"]
 
-        type_mapper = {"integer": "Int64", "number": float, "boolean": bool}
+        type_mapper = {"integer": "Int64", "number": float, "boolean": "boolean"}
 
         dtype = {}
         parse_dates = []
