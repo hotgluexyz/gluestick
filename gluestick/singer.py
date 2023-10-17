@@ -9,7 +9,7 @@ import singer
 from singer import Transformer
 
 
-def gen_singer_header(df: pd.DataFrame, allow_objects: bool):
+def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
     """Generate singer headers based on pandas types.
 
     Parameters
@@ -39,6 +39,10 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool):
     }
 
     for col in df.columns:
+        if schema:
+            header_map = schema
+            break
+
         dtype = df[col].dtype.__str__().lower()
 
         if "date" in dtype:
@@ -134,6 +138,7 @@ def to_singer(
     keys=[],
     filename="data.singer",
     allow_objects=False,
+    schema = None
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -155,9 +160,10 @@ def to_singer(
     """
     if allow_objects:
         df = df.dropna(how="all", axis=1)
-    df, header_map = gen_singer_header(df, allow_objects)
+    df, header_map = gen_singer_header(df, allow_objects, schema)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
+
     with open(output, mode) as f:
         with redirect_stdout(f):
             singer.write_schema(stream, header_map, keys)
