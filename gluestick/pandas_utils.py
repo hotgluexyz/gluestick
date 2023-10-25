@@ -293,7 +293,7 @@ def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
     df[cols] = df[column_name].apply(pd.Series)
 
     if drop:
-        df = df.drop(column_name, 1)
+        df = df.drop(column_name, axis=1)
 
     return df
 
