@@ -38,11 +38,11 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
         },
     }
 
+    if schema:
+        header_map = schema
+        return df, header_map
+    
     for col in df.columns:
-        if schema:
-            header_map = schema
-            break
-
         dtype = df[col].dtype.__str__().lower()
 
         if "date" in dtype:
