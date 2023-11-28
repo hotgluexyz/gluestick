@@ -8,6 +8,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 from datetime import datetime
 import ast
+from gluestick.singer import to_singer
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -423,6 +424,49 @@ def parse_objs(x):
         return ast.literal_eval(x)
     except:
         return json.loads(x)
+
+def to_export(data, name, output_dir, output_file_prefix=None, export_format="singer", keys=[]):
+    """Parse a stringified dict or list of dicts.
+
+    Notes
+    -----
+    This function will export the input data to a specified format
+
+    Parameters
+    ----------
+    data: dataframe
+        dataframe that will be transformed to a specified format.
+    name: str
+        name of the output file
+    output_dir: str
+        path of the folder that will store the output file
+    output_file_prefix: str
+        prefix of the output file name if needed
+    export_format: str
+        format to which the dataframe will be transformed
+        supported values are: singer, parquet, json and csv
+
+    Returns
+    -------
+    return: file
+        it outputs a singer, parquet, json or csv file
+
+    """
+    if output_file_prefix:
+        composed_name = f"{output_file_prefix}{name}"
+    else:
+        composed_name = name
+
+    if export_format == "singer":
+        to_singer(data, name, output_dir, keys=keys, allow_objects=True)
+    elif export_format == "parquet":
+        data.to_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
+    elif export_format == "json":
+        data.to_json(f"{output_dir}/{composed_name}.json", orient="records")
+    elif export_format == "jsonl":
+        data.to_json(f"{output_dir}/{composed_name}.jsonl", orient='records', lines=True)
+    else:
+        data.to_csv(f"{output_dir}/{composed_name}.csv", index=False)
 
 
 class Reader:
