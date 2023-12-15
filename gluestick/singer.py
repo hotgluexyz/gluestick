@@ -170,6 +170,9 @@ def to_singer(
             with Transformer() as transformer:
                 for i, row in df.iterrows():
                     filtered_row = row.dropna().to_dict()
+                    for key, value in filtered_row.items():
+                        if isinstance(value, pd.Timestamp):
+                            filtered_row[key] = value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                     rec = transformer.transform(filtered_row, header_map)
                     singer.write_record(stream, rec)
                 singer.write_state({})
