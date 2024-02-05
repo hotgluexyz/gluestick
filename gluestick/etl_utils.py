@@ -425,7 +425,7 @@ def parse_objs(x):
     except:
         return json.loads(x)
 
-def to_export(data, name, output_dir, output_file_prefix=None, export_format="singer", keys=[]):
+def to_export(data, name, output_dir, keys=[], export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"), output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX")):
     """Parse a stringified dict or list of dicts.
 
     Notes
