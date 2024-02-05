@@ -420,6 +420,10 @@ def parse_objs(x):
         parsed dict or list of dicts.
 
     """
+    # if it's not a string, we just return the input
+    if type(x) != str:
+        return x
+
     try:
         return ast.literal_eval(x)
     except:
