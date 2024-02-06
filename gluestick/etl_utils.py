@@ -456,6 +456,10 @@ def to_export(data, name, output_dir, keys=[], export_format=os.environ.get("DEF
         it outputs a singer, parquet, json or csv file
 
     """
+    # NOTE: This is meant to allow users to override the default output name for a specific stream
+    if os.environ.get(f"HG_UNIFIED_OUTPUT_{name.upper()}"):
+        name = os.environ[f"HG_UNIFIED_OUTPUT_{name.upper()}"]
+
     if output_file_prefix:
         composed_name = f"{output_file_prefix}{name}"
     else:
