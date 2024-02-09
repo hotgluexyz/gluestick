@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import pyarrow.parquet as pq
 from datetime import datetime
+from pytz import utc
 import ast
 from gluestick.singer import to_singer
 
@@ -628,3 +629,24 @@ class Reader:
             dtype[col] = "object"
 
         return dict(dtype=dtype, parse_dates=parse_dates)
+
+
+def localize_datetime(df, column_name):
+    """
+    Localize a Pandas DataFrame column to a specific timezone.
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        The DataFrame to be modified.
+    column_name : str
+        The name of the column to be localized.
+    """
+    # Convert the column to a Pandas Timestamp object
+    df[column_name] = pd.to_datetime(df[column_name], errors="coerce")
+    # Localize the column to the specified timezone
+    try:
+        df[column_name] = df[column_name].dt.tz_localize(utc)
+    except:
+        df[column_name] = df[column_name].dt.tz_convert('UTC')
+
+    return df[column_name]
