@@ -519,7 +519,9 @@ class Reader:
         if catalog and catalog_types:
             types_params = self.get_types_from_catalog(catalog, stream)
             kwargs.update(types_params)
-        return pd.read_csv(filepath, **kwargs)
+        df = pd.read_csv(filepath, **kwargs)
+        df = parse_object_cols(df)
+        return df
 
     def get_metadata(self, stream):
         """Get metadata from parquet file."""
@@ -650,3 +652,14 @@ def localize_datetime(df, column_name):
         df[column_name] = df[column_name].dt.tz_convert('UTC')
 
     return df[column_name]
+
+
+def parse_object_cols(df):
+    object_columns = [column for column in df.columns if df[column].dtype == 'object']
+    for col in object_columns:
+        try:
+            df[col] = df[col].apply(lambda x: parse_objs(x))
+        except:
+            continue
+    return df
+
