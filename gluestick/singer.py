@@ -6,7 +6,7 @@ from contextlib import redirect_stdout
 
 import pandas as pd
 import singer
-from custom_transformer import CustomTransformer as Transformer
+from gluestick.custom_transformer import CustomTransformer as Transformer
 
 
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
