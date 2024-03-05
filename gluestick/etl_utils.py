@@ -514,7 +514,8 @@ class Reader:
         if not filepath:
             return default
         if filepath.endswith(".parquet"):
-            return pd.read_parquet(filepath, use_nullable_dtypes=True, **kwargs)
+            import pyarrow.parquet as pq
+            return pq.read_table(filepath).to_pandas(safe=False)
         catalog = self.read_catalog()
         if catalog and catalog_types:
             types_params = self.get_types_from_catalog(catalog, stream)
