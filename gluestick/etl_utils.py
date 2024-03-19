@@ -607,7 +607,7 @@ class Reader:
 
         """
         filepath = self.input_files.get(stream)
-        headers = pd.read_csv(filepath, index_col=0, nrows=0).columns.tolist()
+        headers = pd.read_csv(filepath, nrows=0).columns.tolist()
 
         streams = next(c for c in catalog["streams"] if c["stream"] == stream)
         types = streams["schema"]["properties"]
