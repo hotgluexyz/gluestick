@@ -131,6 +131,47 @@ def to_singer_schema(input):
     return {"type": ["string", "null"]}
 
 
+def unwrap_json_schema(schema):
+    def resolve_refs(schema, defs):
+        if isinstance(schema, dict):
+            if '$ref' in schema:
+                ref_path = schema['$ref'].split('/')
+                ref_name = ref_path[-1]
+                return resolve_refs(defs[ref_name], defs)
+            else:
+                return {k: resolve_refs(v, defs) for k, v in schema.items() if k not in ['required', 'title']}
+        elif isinstance(schema, list):
+            return [resolve_refs(item, defs) for item in schema]
+        else:
+            return schema
+
+    def simplify_anyof(schema):
+        if isinstance(schema, dict):
+            if 'anyOf' in schema:
+                types = [item.get('type') for item in schema['anyOf'] if 'type' in item]
+
+                # Handle cases where anyOf contains more than just type definitions
+                # For example, when it includes properties or other nested structures
+                combined_schema = {}
+                for item in schema['anyOf']:
+                    for key, value in item.items():
+                        combined_schema[key] = simplify_anyof(value)
+                combined_schema['type'] = types
+                return combined_schema
+            else:
+                return {k: simplify_anyof(v) for k, v in schema.items() if k not in ['required', 'title']}
+        elif isinstance(schema, list):
+            return [simplify_anyof(item) for item in schema]
+        else:
+            return schema
+
+    defs = schema.get('$defs', {})
+    resolved_schema = resolve_refs(schema, defs)
+    simplified_schema = simplify_anyof(resolved_schema)
+    simplified_schema.pop("$defs", None)
+    return simplified_schema
+
+
 def to_singer(
     df: pd.DataFrame,
     stream,
@@ -138,7 +179,8 @@ def to_singer(
     keys=[],
     filename="data.singer",
     allow_objects=False,
-    schema = None
+    schema = None,
+    unified_model = None
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -160,6 +202,10 @@ def to_singer(
     """
     if allow_objects:
         df = df.dropna(how="all", axis=1)
+
+    if unified_model:
+        schema = unwrap_json_schema(unified_model.model_json_schema())
+
     df, header_map = gen_singer_header(df, allow_objects, schema)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"

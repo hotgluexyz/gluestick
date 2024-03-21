@@ -430,7 +430,7 @@ def parse_objs(x):
     except:
         return json.loads(x)
 
-def to_export(data, name, output_dir, keys=[], export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"), output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX")):
+def to_export(data, name, output_dir, keys=[], unified_model = None, export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"), output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX")):
     """Parse a stringified dict or list of dicts.
 
     Notes
@@ -467,7 +467,7 @@ def to_export(data, name, output_dir, keys=[], export_format=os.environ.get("DEF
         composed_name = name
 
     if export_format == "singer":
-        to_singer(data, name, output_dir, keys=keys, allow_objects=True)
+        to_singer(data, name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model)
     elif export_format == "parquet":
         data.to_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
     elif export_format == "json":
