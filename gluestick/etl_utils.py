@@ -651,3 +651,24 @@ def localize_datetime(df, column_name):
         df[column_name] = df[column_name].dt.tz_convert('UTC')
 
     return df[column_name]
+
+def exception(exception, root_dir, error_message=None):
+    """
+    Stores an exception and a message into a file errors.txt, 
+    then the executor reads the error from the txt file to showcase the right error.
+    It should be used instead of raise Exception.
+    Parameters:
+    -----------
+    exception : the exception caught in a try except code.
+    root_dir : str
+        The path of the roo_dir to store errors.txt
+    error_message: str
+        Additional message or data to make the error clearer.
+    """
+    if error_message:
+        error = f"ERROR: {error_message}. Cause: {exception}"
+    else:
+        error = f"ERROR: {exception}"
+    with open(f"{root_dir}/errors.txt", "w") as outfile:
+        outfile.write(error)
+    raise Exception(error)
