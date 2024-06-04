@@ -609,7 +609,7 @@ class Reader:
         filepath = self.input_files.get(stream)
         headers = pd.read_csv(filepath, nrows=0).columns.tolist()
 
-        streams = next(c for c in catalog["streams"] if c["stream"] == stream)
+        streams = next(c for c in catalog["streams"] if c["stream"] == stream or c["tap_stream_id"] == stream)
         types = streams["schema"]["properties"]
 
         type_mapper = {"integer": "Int64", "number": float, "boolean": "boolean"}

@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="gluestick",
-    version="2.1.15",
+    version="2.1.16",
     description="ETL utility functions built on Pandas",
     long_description=long_description,
     long_description_content_type="text/markdown",
