@@ -450,7 +450,7 @@ def to_export(data, name, output_dir, keys=[], unified_model = None, export_form
     export_format: str
         format to which the dataframe will be transformed
         supported values are: singer, parquet, json and csv
-    unified_schema: pydantic model
+    unified_model: pydantic model
         pydantic model used to generate the schema for export format
         'singer'
     schema: dict
