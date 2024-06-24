@@ -452,7 +452,7 @@ def to_export(data, name, output_dir, keys=[], unified_model = None, export_form
         supported values are: singer, parquet, json and csv
     unified_model: pydantic model
         pydantic model used to generate the schema for export format
-        'singer'
+        'singer' 
     schema: dict
         customized schema used for export format 'singer'
 
