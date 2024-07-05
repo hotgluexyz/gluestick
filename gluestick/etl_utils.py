@@ -269,6 +269,7 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
 
     """
     df = df.copy()
+    _df = None
 
     if pk:
         # PK needs to be unique, so we drop the duplicated values
@@ -288,6 +289,15 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
         if pk:
             hash_df = hash_df.drop_duplicates(subset=pk)
 
+            # Save the original types
+            df_original_types = {col: df[col].dtype for col in pk}
+            hash_df_original_types = {col: hash_df[col].dtype for col in hash_df.columns}
+
+            # Convert primary keys to string to handle merging properly
+            for col in pk:
+                df[col] = df[col].astype(str)
+                hash_df[col] = hash_df[col].astype(str)
+
         if updated_flag and pk:
             updated_pk = df[pk]
             updated_pk["_updated"] = updated_pk.isin(hash_df[pk])
@@ -300,8 +310,26 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
 
         if updated_flag and pk:
             df = df.merge(updated_pk, on=pk, how="left")
+        
+        # rollback types changed for merging 
+        _df = pd.DataFrame(columns = pk + ["hash"])
+        if not df.empty:
+            for col, dtype in hash_df_original_types.items():
+                if dtype in ["Int32", "Int64"]:
+                    dtype = int
+                _df[col] = df[col].astype(dtype)
 
-    snapshot_records(df[pk + ["hash"]], f"{name}.hash", output_dir, pk, use_csv=use_csv)
+    snap_df = df if _df is None else _df
+    snapshot_records(snap_df[pk + ["hash"]], f"{name}.hash", output_dir, pk, use_csv=use_csv)
+    del snap_df
+
+    # rollback types changed for merging
+    for col, dtype in df_original_types.items():
+        if dtype in ["Int32", "Int64"]:
+            dtype = int
+        df[col] = df[col].astype(dtype)
+
+    # rollback to output dataframe with o
     df = df.drop("hash", axis=1)
     return df
 
