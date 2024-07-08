@@ -7,6 +7,7 @@ from contextlib import redirect_stdout
 import pandas as pd
 import singer
 from singer import Transformer
+from gluestick.etl_utils import deep_convert_datetimes
 
 
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
@@ -216,9 +217,7 @@ def to_singer(
             with Transformer() as transformer:
                 for i, row in df.iterrows():
                     filtered_row = row.dropna().to_dict()
-                    for key, value in filtered_row.items():
-                        if isinstance(value, pd.Timestamp):
-                            filtered_row[key] = value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    filtered_row = deep_convert_datetimes(filtered_row)
                     rec = transformer.transform(filtered_row, header_map)
                     singer.write_record(stream, rec)
                 singer.write_state({})
