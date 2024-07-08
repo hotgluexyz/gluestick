@@ -7,8 +7,7 @@ from contextlib import redirect_stdout
 import pandas as pd
 import singer
 from singer import Transformer
-from gluestick.etl_utils import deep_convert_datetimes
-
+import datetime
 
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
     """Generate singer headers based on pandas types.
@@ -171,6 +170,31 @@ def unwrap_json_schema(schema):
     simplified_schema = simplify_anyof(resolved_schema)
     simplified_schema.pop("$defs", None)
     return simplified_schema
+
+
+def deep_convert_datetimes(value):
+    """Transforms all nested datetimes in a list or dict to %Y-%m-%dT%H:%M:%S.%fZ.
+
+    Notes
+    -----
+    This function transforms all datetimes to %Y-%m-%dT%H:%M:%S.%fZ
+
+    Parameters
+    ----------
+    value: list, dict, datetime
+
+    Returns
+    -------
+    return: list or dict with all datetime values transformed to %Y-%m-%dT%H:%M:%S.%fZ
+
+    """
+    if isinstance(value, list):
+        return [deep_convert_datetimes(child) for child in value]
+    elif isinstance(value, dict):
+        return {k: deep_convert_datetimes(v) for k, v in value.items()}
+    elif isinstance(value, datetime.date) or isinstance(value, datetime.datetime):
+        return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return value
 
 
 def to_singer(

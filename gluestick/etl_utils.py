@@ -431,31 +431,6 @@ def parse_objs(x):
         return json.loads(x)
     
 
-def deep_convert_datetimes(value):
-    """Transforms all nested datetimes in a list or dict to %Y-%m-%dT%H:%M:%S.%fZ.
-
-    Notes
-    -----
-    This function transforms all datetimes to %Y-%m-%dT%H:%M:%S.%fZ
-
-    Parameters
-    ----------
-    value: list, dict, datetime
-
-    Returns
-    -------
-    return: list or dict with all datetime values transformed to %Y-%m-%dT%H:%M:%S.%fZ
-
-    """
-    if isinstance(value, list):
-        return [deep_convert_datetimes(child) for child in value]
-    elif isinstance(value, dict):
-        return {k: deep_convert_datetimes(v) for k, v in value.items()}
-    elif isinstance(value, datetime.date) or isinstance(value, datetime.datetime):
-        return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    return value
-
-
 def to_export(data, name, output_dir, keys=[], unified_model = None, export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"), output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"), schema=None):
     """Parse a stringified dict or list of dicts.
 
