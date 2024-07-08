@@ -429,6 +429,7 @@ def parse_objs(x):
         return ast.literal_eval(x)
     except:
         return json.loads(x)
+    
 
 def to_export(data, name, output_dir, keys=[], unified_model = None, export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"), output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"), schema=None):
     """Parse a stringified dict or list of dicts.

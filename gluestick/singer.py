@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 import pandas as pd
 import singer
 from singer import Transformer
-
+import datetime
 
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
     """Generate singer headers based on pandas types.
@@ -172,6 +172,31 @@ def unwrap_json_schema(schema):
     return simplified_schema
 
 
+def deep_convert_datetimes(value):
+    """Transforms all nested datetimes in a list or dict to %Y-%m-%dT%H:%M:%S.%fZ.
+
+    Notes
+    -----
+    This function transforms all datetimes to %Y-%m-%dT%H:%M:%S.%fZ
+
+    Parameters
+    ----------
+    value: list, dict, datetime
+
+    Returns
+    -------
+    return: list or dict with all datetime values transformed to %Y-%m-%dT%H:%M:%S.%fZ
+
+    """
+    if isinstance(value, list):
+        return [deep_convert_datetimes(child) for child in value]
+    elif isinstance(value, dict):
+        return {k: deep_convert_datetimes(v) for k, v in value.items()}
+    elif isinstance(value, datetime.date) or isinstance(value, datetime.datetime):
+        return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return value
+
+
 def to_singer(
     df: pd.DataFrame,
     stream,
@@ -179,8 +204,8 @@ def to_singer(
     keys=[],
     filename="data.singer",
     allow_objects=False,
-    schema = None,
-    unified_model = None
+    schema=None,
+    unified_model=None,
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -216,9 +241,7 @@ def to_singer(
             with Transformer() as transformer:
                 for i, row in df.iterrows():
                     filtered_row = row.dropna().to_dict()
-                    for key, value in filtered_row.items():
-                        if isinstance(value, pd.Timestamp):
-                            filtered_row[key] = value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    filtered_row = deep_convert_datetimes(filtered_row)
                     rec = transformer.transform(filtered_row, header_map)
                     singer.write_record(stream, rec)
                 singer.write_state({})
