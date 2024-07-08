@@ -204,8 +204,8 @@ def to_singer(
     keys=[],
     filename="data.singer",
     allow_objects=False,
-    schema = None,
-    unified_model = None
+    schema=None,
+    unified_model=None,
 ):
     """Convert a pandas DataFrame into a singer file.
 
