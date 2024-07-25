@@ -168,7 +168,7 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 
 def snapshot_records(
-    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, **kwargs
+    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, **kwargs
 ):
     """Update a snapshot file.
 
@@ -184,6 +184,8 @@ def snapshot_records(
         The primary key used for the snapshot.
     just_new: str
         Return just the input data if True, else returns the whole data
+    coerce_types: bool
+        Coerces types to the stream_data types if True, else mantains current snapshot types
     **kwargs:
         Additional arguments that are passed to pandas read_csv.
 
@@ -200,6 +202,22 @@ def snapshot_records(
     if stream_data is not None and snapshot is not None:
         merged_data = pd.concat([snapshot, stream_data])
         merged_data = merged_data.drop_duplicates(pk, keep="last")
+        # coerce snapshot types to incoming data types
+        if coerce_types:
+            # Save incoming data types
+            df_types = stream_data.dtypes
+            snapshot_types = snapshot.dtypes
+            try:
+                for column, dtype in df_types.items():
+                    if dtype == "bool":
+                        merged_data[column] = merged_data[column].astype("boolean")
+                    else:
+                        merged_data[column] = merged_data[column].astype(dtype)
+            except Exception as e:
+                raise Exception(
+                    f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}"
+                )
+        # export data
         if use_csv:
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
