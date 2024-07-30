@@ -204,19 +204,18 @@ def snapshot_records(
         merged_data = merged_data.drop_duplicates(pk, keep="last")
         # coerce snapshot types to incoming data types
         if coerce_types:
-            # Save incoming data types
-            df_types = stream_data.dtypes
-            snapshot_types = snapshot.dtypes
-            try:
-                for column, dtype in df_types.items():
-                    if dtype == "bool":
-                        merged_data[column] = merged_data[column].astype("boolean")
-                    else:
-                        merged_data[column] = merged_data[column].astype(dtype)
-            except Exception as e:
-                raise Exception(
-                    f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}"
-                )
+            if not stream_data.empty and not snapshot.empty:
+                # Save incoming data types
+                df_types = stream_data.dtypes
+                snapshot_types = snapshot.dtypes
+                try:
+                    for column, dtype in df_types.items():
+                        if dtype == 'bool':
+                            merged_data[column] = merged_data[column].astype('boolean')
+                        else:
+                            merged_data[column] = merged_data[column].astype(dtype)
+                except Exception as e:
+                    raise Exception(f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}")
         # export data
         if use_csv:
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
