@@ -448,7 +448,17 @@ def parse_objs(x):
         return json.loads(x)
     
 
-def to_export(data, name, output_dir, keys=[], unified_model = None, export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"), output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"), schema=None):
+def to_export(
+    data,
+    name,
+    output_dir,
+    keys=[],
+    unified_model=None,
+    export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"),
+    output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"),
+    schema=None,
+    stringify_objects=False,
+):
     """Parse a stringified dict or list of dicts.
 
     Notes
@@ -470,9 +480,12 @@ def to_export(data, name, output_dir, keys=[], unified_model = None, export_form
         supported values are: singer, parquet, json and csv
     unified_model: pydantic model
         pydantic model used to generate the schema for export format
-        'singer' 
+        'singer'
     schema: dict
         customized schema used for export format 'singer'
+    stringify_objects: bool
+        for parquet files it will stringify complex structures as arrays
+        of objects
 
     Returns
     -------
@@ -492,7 +505,13 @@ def to_export(data, name, output_dir, keys=[], unified_model = None, export_form
     if export_format == "singer":
         to_singer(data, name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
     elif export_format == "parquet":
-        data.to_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
+        if stringify_objects:
+            data.to_parquet(
+                os.path.join(output_dir, f"{composed_name}.parquet"),
+                engine="fastparquet",
+            )
+        else:
+            data.to_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
     elif export_format == "json":
         data.to_json(f"{output_dir}/{composed_name}.json", orient="records")
     elif export_format == "jsonl":
