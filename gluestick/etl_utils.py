@@ -513,9 +513,9 @@ def to_export(
         else:
             data.to_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
     elif export_format == "json":
-        data.to_json(f"{output_dir}/{composed_name}.json", orient="records")
+        data.to_json(f"{output_dir}/{composed_name}.json", orient="records", date_format='iso')
     elif export_format == "jsonl":
-        data.to_json(f"{output_dir}/{composed_name}.jsonl", orient='records', lines=True)
+        data.to_json(f"{output_dir}/{composed_name}.jsonl", orient='records', lines=True, date_format='iso')
     else:
         data.to_csv(f"{output_dir}/{composed_name}.csv", index=False)
 
