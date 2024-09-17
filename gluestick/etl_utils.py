@@ -661,6 +661,11 @@ class Reader:
         for col in headers:
             col_type = types.get(col)
             if col_type:
+                # if col has multiple types, use type with format if it not exists assign type object to support multiple types
+                any_of_list = col_type.get("anyOf", [])
+                if any_of_list:
+                    type_with_format = next((col_t for col_t in any_of_list if "format" in col_t), None)
+                    col_type = type_with_format if type_with_format else {"type": "object"}
                 if col_type.get("format") == "date-time":
                     parse_dates.append(col)
                     continue
