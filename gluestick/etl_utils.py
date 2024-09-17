@@ -562,17 +562,19 @@ class Reader:
     def get(self, stream, default=None, catalog_types=False, parse_objects=False, **kwargs):
         """Read the selected file."""
         filepath = self.input_files.get(stream)
+        df = None
         if not filepath:
             return default
         if filepath.endswith(".parquet"):
             import pyarrow.parquet as pq
-            return pq.read_table(filepath).to_pandas(safe=False)
-        catalog = self.read_catalog()
-        if catalog and catalog_types:
-            types_params = self.get_types_from_catalog(catalog, stream)
-            kwargs.update(types_params)
-        df = pd.read_csv(filepath, **kwargs)
-        if parse_objects:
+            df = pq.read_table(filepath).to_pandas(safe=False)
+        else:
+            catalog = self.read_catalog()
+            if catalog and catalog_types:
+                types_params = self.get_types_from_catalog(catalog, stream)
+                kwargs.update(types_params)
+            df = pd.read_csv(filepath, **kwargs)
+        if parse_objects and df is not None and not df.empty:
             df = parse_object_cols(df)
         return df
 
