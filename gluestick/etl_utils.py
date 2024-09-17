@@ -441,6 +441,15 @@ def parse_objs(x):
     # if it's not a string, we just return the input
     if type(x) != str:
         return x
+    
+    # if it's a numeric type we don't want to parse it by accident
+    if type(x) == str:
+        try:
+            float(x)
+            return x
+        except:
+            # it failed so it's not a float or int, we can proceed
+            pass
 
     try:
         return ast.literal_eval(x)
@@ -550,7 +559,7 @@ class Reader:
     def __repr__(self):
         return str(list(self.input_files.keys()))
 
-    def get(self, stream, default=None, catalog_types=False, **kwargs):
+    def get(self, stream, default=None, catalog_types=False, parse_objects=False, **kwargs):
         """Read the selected file."""
         filepath = self.input_files.get(stream)
         if not filepath:
@@ -563,7 +572,8 @@ class Reader:
             types_params = self.get_types_from_catalog(catalog, stream)
             kwargs.update(types_params)
         df = pd.read_csv(filepath, **kwargs)
-        df = parse_object_cols(df)
+        if parse_objects:
+            df = parse_object_cols(df)
         return df
 
     def get_metadata(self, stream):
