@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 import pandas as pd
 import singer
 from singer import Transformer
-
+import datetime
 
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
     """Generate singer headers based on pandas types.
@@ -131,6 +131,72 @@ def to_singer_schema(input):
     return {"type": ["string", "null"]}
 
 
+def unwrap_json_schema(schema):
+    def resolve_refs(schema, defs):
+        if isinstance(schema, dict):
+            if '$ref' in schema:
+                ref_path = schema['$ref'].split('/')
+                ref_name = ref_path[-1]
+                return resolve_refs(defs[ref_name], defs)
+            else:
+                return {k: resolve_refs(v, defs) for k, v in schema.items() if k not in ['required', 'title']}
+        elif isinstance(schema, list):
+            return [resolve_refs(item, defs) for item in schema]
+        else:
+            return schema
+
+    def simplify_anyof(schema):
+        if isinstance(schema, dict):
+            if 'anyOf' in schema:
+                types = [item.get('type') for item in schema['anyOf'] if 'type' in item]
+
+                # Handle cases where anyOf contains more than just type definitions
+                # For example, when it includes properties or other nested structures
+                combined_schema = {}
+                for item in schema['anyOf']:
+                    for key, value in item.items():
+                        combined_schema[key] = simplify_anyof(value)
+                combined_schema['type'] = types
+                return combined_schema
+            else:
+                return {k: simplify_anyof(v) for k, v in schema.items() if k not in ['required', 'title']}
+        elif isinstance(schema, list):
+            return [simplify_anyof(item) for item in schema]
+        else:
+            return schema
+
+    defs = schema.get('$defs', {})
+    resolved_schema = resolve_refs(schema, defs)
+    simplified_schema = simplify_anyof(resolved_schema)
+    simplified_schema.pop("$defs", None)
+    return simplified_schema
+
+
+def deep_convert_datetimes(value):
+    """Transforms all nested datetimes in a list or dict to %Y-%m-%dT%H:%M:%S.%fZ.
+
+    Notes
+    -----
+    This function transforms all datetimes to %Y-%m-%dT%H:%M:%S.%fZ
+
+    Parameters
+    ----------
+    value: list, dict, datetime
+
+    Returns
+    -------
+    return: list or dict with all datetime values transformed to %Y-%m-%dT%H:%M:%S.%fZ
+
+    """
+    if isinstance(value, list):
+        return [deep_convert_datetimes(child) for child in value]
+    elif isinstance(value, dict):
+        return {k: deep_convert_datetimes(v) for k, v in value.items()}
+    elif isinstance(value, datetime.date) or isinstance(value, datetime.datetime):
+        return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return value
+
+
 def to_singer(
     df: pd.DataFrame,
     stream,
@@ -138,7 +204,8 @@ def to_singer(
     keys=[],
     filename="data.singer",
     allow_objects=False,
-    schema = None
+    schema=None,
+    unified_model=None,
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -160,6 +227,10 @@ def to_singer(
     """
     if allow_objects:
         df = df.dropna(how="all", axis=1)
+
+    if unified_model:
+        schema = unwrap_json_schema(unified_model.model_json_schema())
+
     df, header_map = gen_singer_header(df, allow_objects, schema)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
@@ -170,9 +241,7 @@ def to_singer(
             with Transformer() as transformer:
                 for i, row in df.iterrows():
                     filtered_row = row.dropna().to_dict()
-                    for key, value in filtered_row.items():
-                        if isinstance(value, pd.Timestamp):
-                            filtered_row[key] = value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    filtered_row = deep_convert_datetimes(filtered_row)
                     rec = transformer.transform(filtered_row, header_map)
                     singer.write_record(stream, rec)
                 singer.write_state({})

@@ -168,7 +168,7 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 
 def snapshot_records(
-    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, **kwargs
+    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, **kwargs
 ):
     """Update a snapshot file.
 
@@ -184,6 +184,8 @@ def snapshot_records(
         The primary key used for the snapshot.
     just_new: str
         Return just the input data if True, else returns the whole data
+    coerce_types: bool
+        Coerces types to the stream_data types if True, else mantains current snapshot types
     **kwargs:
         Additional arguments that are passed to pandas read_csv.
 
@@ -200,6 +202,21 @@ def snapshot_records(
     if stream_data is not None and snapshot is not None:
         merged_data = pd.concat([snapshot, stream_data])
         merged_data = merged_data.drop_duplicates(pk, keep="last")
+        # coerce snapshot types to incoming data types
+        if coerce_types:
+            if not stream_data.empty and not snapshot.empty:
+                # Save incoming data types
+                df_types = stream_data.dtypes
+                snapshot_types = snapshot.dtypes
+                try:
+                    for column, dtype in df_types.items():
+                        if dtype == 'bool':
+                            merged_data[column] = merged_data[column].astype('boolean')
+                        else:
+                            merged_data[column] = merged_data[column].astype(dtype)
+                except Exception as e:
+                    raise Exception(f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}")
+        # export data
         if use_csv:
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
@@ -429,8 +446,19 @@ def parse_objs(x):
         return ast.literal_eval(x)
     except:
         return json.loads(x)
+    
 
-def to_export(data, name, output_dir, keys=[], export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"), output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX")):
+def to_export(
+    data,
+    name,
+    output_dir,
+    keys=[],
+    unified_model=None,
+    export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"),
+    output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"),
+    schema=None,
+    stringify_objects=False,
+):
     """Parse a stringified dict or list of dicts.
 
     Notes
@@ -450,6 +478,14 @@ def to_export(data, name, output_dir, keys=[], export_format=os.environ.get("DEF
     export_format: str
         format to which the dataframe will be transformed
         supported values are: singer, parquet, json and csv
+    unified_model: pydantic model
+        pydantic model used to generate the schema for export format
+        'singer'
+    schema: dict
+        customized schema used for export format 'singer'
+    stringify_objects: bool
+        for parquet files it will stringify complex structures as arrays
+        of objects
 
     Returns
     -------
@@ -467,9 +503,15 @@ def to_export(data, name, output_dir, keys=[], export_format=os.environ.get("DEF
         composed_name = name
 
     if export_format == "singer":
-        to_singer(data, name, output_dir, keys=keys, allow_objects=True)
+        to_singer(data, name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
     elif export_format == "parquet":
-        data.to_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
+        if stringify_objects:
+            data.to_parquet(
+                os.path.join(output_dir, f"{composed_name}.parquet"),
+                engine="fastparquet",
+            )
+        else:
+            data.to_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
     elif export_format == "json":
         data.to_json(f"{output_dir}/{composed_name}.json", orient="records")
     elif export_format == "jsonl":
@@ -514,7 +556,8 @@ class Reader:
         if not filepath:
             return default
         if filepath.endswith(".parquet"):
-            return pd.read_parquet(filepath, use_nullable_dtypes=True, **kwargs)
+            import pyarrow.parquet as pq
+            return pq.read_table(filepath).to_pandas(safe=False)
         catalog = self.read_catalog()
         if catalog and catalog_types:
             types_params = self.get_types_from_catalog(catalog, stream)
@@ -608,9 +651,9 @@ class Reader:
 
         """
         filepath = self.input_files.get(stream)
-        headers = pd.read_csv(filepath, index_col=0, nrows=0).columns.tolist()
+        headers = pd.read_csv(filepath, nrows=0).columns.tolist()
 
-        streams = next(c for c in catalog["streams"] if c["stream"] == stream)
+        streams = next(c for c in catalog["streams"] if c["stream"] == stream or c["tap_stream_id"] == stream)
         types = streams["schema"]["properties"]
 
         type_mapper = {"integer": "Int64", "number": float, "boolean": "boolean"}
@@ -663,3 +706,23 @@ def parse_object_cols(df):
             continue
     return df
 
+def exception(exception, root_dir, error_message=None):
+    """
+    Stores an exception and a message into a file errors.txt, 
+    then the executor reads the error from the txt file to showcase the right error.
+    It should be used instead of raise Exception.
+    Parameters:
+    -----------
+    exception : the exception caught in a try except code.
+    root_dir : str
+        The path of the roo_dir to store errors.txt
+    error_message: str
+        Additional message or data to make the error clearer.
+    """
+    if error_message:
+        error = f"ERROR: {error_message}. Cause: {exception}"
+    else:
+        error = f"ERROR: {exception}"
+    with open(f"{root_dir}/errors.txt", "w") as outfile:
+        outfile.write(error)
+    raise Exception(error)
