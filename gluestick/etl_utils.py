@@ -562,7 +562,12 @@ class Reader:
         if catalog and catalog_types:
             types_params = self.get_types_from_catalog(catalog, stream)
             kwargs.update(types_params)
-        return pd.read_csv(filepath, **kwargs)
+        df = pd.read_csv(filepath, **kwargs)
+        # if a date field value is empty read_csv will read it as "object"
+        # make sure all date fields are typed as date
+        for date_col in kwargs.get("parse_dates", []):
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        return df
 
     def get_metadata(self, stream):
         """Get metadata from parquet file."""
