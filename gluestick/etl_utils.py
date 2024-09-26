@@ -5,6 +5,7 @@ import json
 import os
 
 import pandas as pd
+import pyarrow as pa
 import pyarrow.parquet as pq
 from datetime import datetime
 from pytz import utc
@@ -556,7 +557,40 @@ class Reader:
         if not filepath:
             return default
         if filepath.endswith(".parquet"):
-            import pyarrow.parquet as pq
+            catalog = self.read_catalog()
+            if catalog and catalog_types:
+                try:
+                    headers = pq.read_table(filepath).to_pandas(safe=False).columns.tolist()
+                    types_params = self.get_types_from_catalog(catalog, stream, headers=headers)
+                    dtype_dict = types_params.get('dtype')
+                    
+                    # Mapping pandas dtypes to pyarrow types
+                    type_mapping = {
+                        'int64': pa.int64(),
+                        'float64': pa.float64(),
+                        "<class 'float'>": pa.float64(),
+                        'string': pa.string(),
+                        'object': pa.string(),
+                        'datetime64[ns]': pa.timestamp('ns'),
+                        'bool': pa.bool_(),
+                        'boolean': pa.bool_(),
+                        'category': pa.dictionary(pa.int32(), pa.string()),  # Example for categorical data
+                        # Add more mappings as needed
+                    }
+
+                    if dtype_dict:
+                        # Convert dtype dictionary to pyarrow schema
+                        fields = [(col, type_mapping[str(dtype).lower()]) for col, dtype in dtype_dict.items()]
+                        schema = pa.schema(fields)
+                        df = pq.read_table(filepath, schema=schema).to_pandas(safe=False)
+                        for col, dtype in dtype_dict.items():
+                            if str(dtype).lower() in ["bool", "boolean"]:
+                                df[col] = df[col].astype('boolean')
+                        return df
+                except:
+                    print(f"Failed to parse catalog_types for {stream}. Ignoring.")
+                    pass
+
             return pq.read_table(filepath).to_pandas(safe=False)
         catalog = self.read_catalog()
         if catalog and catalog_types:
@@ -637,7 +671,7 @@ class Reader:
             catalog = None
         return catalog
 
-    def get_types_from_catalog(self, catalog, stream):
+    def get_types_from_catalog(self, catalog, stream, headers=None):
         """Get the pandas types base on the catalog definition.
 
         Parameters
@@ -654,9 +688,13 @@ class Reader:
 
         """
         filepath = self.input_files.get(stream)
-        headers = pd.read_csv(filepath, nrows=0).columns.tolist()
+        if headers is None:
+            headers = pd.read_csv(filepath, nrows=0).columns.tolist()
 
-        streams = next(c for c in catalog["streams"] if c["stream"] == stream or c["tap_stream_id"] == stream)
+        streams = next((c for c in catalog["streams"] if c["stream"] == stream or c["tap_stream_id"] == stream), None)
+        if not streams:
+            return dict()
+
         types = streams["schema"]["properties"]
 
         type_mapper = {"integer": "Int64", "number": float, "boolean": "boolean"}
