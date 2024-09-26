@@ -574,8 +574,7 @@ class Reader:
                         'datetime64[ns]': pa.timestamp('ns'),
                         'bool': pa.bool_(),
                         'boolean': pa.bool_(),
-                        'category': pa.dictionary(pa.int32(), pa.string()),  # Example for categorical data
-                        # Add more mappings as needed
+                        # TODO: Add more mappings as needed
                     }
 
                     if dtype_dict:
@@ -584,10 +583,13 @@ class Reader:
                         schema = pa.schema(fields)
                         df = pq.read_table(filepath, schema=schema).to_pandas(safe=False)
                         for col, dtype in dtype_dict.items():
+                            # NOTE: bools require explicit conversion at the end because if there are empty values (NaN)
+                            # pyarrow/pd defaults to convert to string
                             if str(dtype).lower() in ["bool", "boolean"]:
                                 df[col] = df[col].astype('boolean')
                         return df
                 except:
+                    # NOTE: silencing errors to avoid breaking existing workflow
                     print(f"Failed to parse catalog_types for {stream}. Ignoring.")
                     pass
 
