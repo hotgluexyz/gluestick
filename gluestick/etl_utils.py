@@ -563,6 +563,7 @@ class Reader:
                     headers = pq.read_table(filepath).to_pandas(safe=False).columns.tolist()
                     types_params = self.get_types_from_catalog(catalog, stream, headers=headers)
                     dtype_dict = types_params.get('dtype')
+                    parse_dates = types_params.get('parse_dates')
                     
                     # Mapping pandas dtypes to pyarrow types
                     type_mapping = {
@@ -580,6 +581,7 @@ class Reader:
                     if dtype_dict:
                         # Convert dtype dictionary to pyarrow schema
                         fields = [(col, type_mapping[str(dtype).lower()]) for col, dtype in dtype_dict.items()]
+                        fields = fields.extend([(col, pa.timestamp('ns')) for col in parse_dates])
                         schema = pa.schema(fields)
                         df = pq.read_table(filepath, schema=schema).to_pandas(safe=False)
                         for col, dtype in dtype_dict.items():
