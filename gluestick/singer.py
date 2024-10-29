@@ -303,7 +303,7 @@ def to_singer(
         Allow or not objects to the parsed, if false defaults types to str.
 
     """
-    catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", False)
+    catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     if catalog_schema:
         allow_objects = True
         # get schema from catalog
