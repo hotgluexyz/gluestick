@@ -1,15 +1,18 @@
 """Singer related util functions."""
 
+import ast
+import datetime
 import json
 import os
 from contextlib import redirect_stdout
 
 import pandas as pd
 import singer
+from gluestick.reader import Reader
 from singer import Transformer
-import datetime
 
-def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
+
+def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False):
     """Generate singer headers based on pandas types.
 
     Parameters
@@ -38,7 +41,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
         },
     }
 
-    if schema:
+    if schema and not catalog_schema:
         header_map = schema
         return df, header_map
     
@@ -70,18 +73,18 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
                                 new_input.update(temp_dict)
                             else:
                                 new_input = arr_value        
-                schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
-                header_map["properties"][col] = schema
+                _schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
+                header_map["properties"][col] = _schema
                 if not new_input:
                     header_map["properties"][col] = {
                             "items": type_mapping["str"],
                             "type": ["array", "null"],
                         } 
             elif isinstance(first_value, dict):
-                schema = dict(type=["object", "null"], properties={})
+                _schema = dict(type=["object", "null"], properties={})
                 for k, v in first_value.items():
-                    schema["properties"][k] = to_singer_schema(v)
-                header_map["properties"][col] = schema
+                    _schema["properties"][k] = to_singer_schema(v)
+                header_map["properties"][col] = _schema
             else:
                 header_map["properties"][col] = type_mapping["str"]
         else:
@@ -95,6 +98,12 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None):
                 return x
 
             df[col] = df[col].apply(check_null)
+    
+    # update schema using types from catalog and keeping extra columns not defined in catalog
+    # i.e. tenant, sync_date, etc
+    if catalog_schema:
+        header_map["properties"].update(schema["properties"])
+
     return df, header_map
 
 
@@ -196,6 +205,75 @@ def deep_convert_datetimes(value):
         return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     return value
 
+def parse_objs(x):
+    """Parse a stringified dict or list of dicts.
+
+    Notes
+    -----
+    This function will parse a stringified dict or list of dicts
+
+    Parameters
+    ----------
+    x: str
+        stringified dict or list of dicts.
+
+    Returns
+    -------
+    return: dict, list
+        parsed dict or list of dicts.
+
+    """
+    # if it's not a string, we just return the input
+    if type(x) != str:
+        return x
+
+    try:
+        return ast.literal_eval(x)
+    except:
+        return json.loads(x)
+
+
+def get_catalog_schema(stream):
+    """Get a df schema using the catalog.
+
+    Parameters
+    ----------
+    stream: str
+        Stream name in catalog.
+
+    """
+    input = Reader()
+    catalog = input.read_catalog()
+    schema = next(
+        (str["schema"] for str in catalog["streams"] if str["stream"] == stream), None
+    )
+    if not schema:
+        raise Exception(f"No schema found in catalog for stream {stream}")
+    else:
+        # keep only relevant fields
+        schema = {k: v for k, v in schema.items() if k in ["type", "properties"]}
+    return schema
+
+
+def parse_df_cols(df, schema):
+    """Parse all df list and dict columns according to schema.
+
+    Parameters
+    ----------
+    stream: str
+        Stream name in catalog.
+    schema: dict
+        Schema that will be used to export the data.
+
+    """
+    for col in df.columns:
+        if any(
+            item in ["object", "array"]
+            for item in schema["properties"].get(col, {}).get("type", [])
+        ):
+            df[col] = df[col].apply(lambda x: parse_objs(x))
+    return df
+
 
 def to_singer(
     df: pd.DataFrame,
@@ -225,13 +303,21 @@ def to_singer(
         Allow or not objects to the parsed, if false defaults types to str.
 
     """
+    catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
+    if catalog_schema:
+        allow_objects = True
+        # get schema from catalog
+        schema = get_catalog_schema(stream)
+        # parse all fields that are typed as objects or lists
+        df = parse_df_cols(df, schema)
+
+    elif unified_model:
+        schema = unwrap_json_schema(unified_model.model_json_schema())
+
     if allow_objects:
         df = df.dropna(how="all", axis=1)
 
-    if unified_model:
-        schema = unwrap_json_schema(unified_model.model_json_schema())
-
-    df, header_map = gen_singer_header(df, allow_objects, schema)
+    df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
 
