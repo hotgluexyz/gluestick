@@ -589,6 +589,8 @@ class Reader:
                             # pyarrow/pd defaults to convert to string
                             if str(dtype).lower() in ["bool", "boolean"]:
                                 df[col] = df[col].astype('boolean')
+                            elif str(dtype).lower() in ["int64"]:
+                                df[col] = df[col].astype('Int64')
                         return df
                 except:
                     # NOTE: silencing errors to avoid breaking existing workflow
