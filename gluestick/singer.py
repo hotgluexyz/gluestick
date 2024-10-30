@@ -302,9 +302,13 @@ def to_singer(
     allow_objects: boolean
         Allow or not objects to the parsed, if false defaults types to str.
 
-    """
+    """    
+    if allow_objects and not catalog_schema:
+        df = df.dropna(how="all", axis=1)
+    
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     if catalog_schema:
+        # it'll allow_objects but keeping all columns
         allow_objects = True
         # get schema from catalog
         schema = get_catalog_schema(stream)
@@ -313,9 +317,6 @@ def to_singer(
 
     elif unified_model:
         schema = unwrap_json_schema(unified_model.model_json_schema())
-
-    if allow_objects:
-        df = df.dropna(how="all", axis=1)
 
     df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema)
     output = os.path.join(output_dir, filename)
@@ -326,7 +327,11 @@ def to_singer(
             singer.write_schema(stream, header_map, keys)
             with Transformer() as transformer:
                 for i, row in df.iterrows():
-                    filtered_row = row.dropna().to_dict()
+                    if not catalog_schema:
+                        filtered_row = row.dropna()
+                    else:
+                        filtered_row = row.where(pd.notna(row), None)
+                    filtered_row = filtered_row.to_dict()
                     filtered_row = deep_convert_datetimes(filtered_row)
                     rec = transformer.transform(filtered_row, header_map)
                     singer.write_record(stream, rec)
