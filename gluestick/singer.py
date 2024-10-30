@@ -302,11 +302,12 @@ def to_singer(
     allow_objects: boolean
         Allow or not objects to the parsed, if false defaults types to str.
 
-    """    
+    """
+    catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
+
     if allow_objects and not catalog_schema:
         df = df.dropna(how="all", axis=1)
-    
-    catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
+
     if catalog_schema:
         # it'll allow_objects but keeping all columns
         allow_objects = True
