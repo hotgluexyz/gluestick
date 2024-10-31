@@ -272,10 +272,11 @@ def parse_df_cols(df, schema):
 
     """
     for col in df.columns:
-        if any(
+        col_type = schema["properties"].get(col, {}).get("type", [])
+        if (isinstance(col_type, list) and any(
             item in ["object", "array"]
-            for item in schema["properties"].get(col, {}).get("type", [])
-        ):
+            for item in col_type
+        )) or col_type in ["object", "array"]:
             df[col] = df[col].apply(lambda x: parse_objs(x))
     return df
 
