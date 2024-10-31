@@ -252,6 +252,11 @@ def get_catalog_schema(stream):
     else:
         # keep only relevant fields
         schema = {k: v for k, v in schema.items() if k in ["type", "properties"]}
+        # need to ensure every array type has an items dict or we'll have issues
+        for p in schema.get("properties", dict()):
+            prop = schema["properties"][p]
+            if prop.get("type") == "array" or "array" in prop.get("type") and prop.get("items") is None:
+                prop["items"] = dict()
     return schema
 
 
