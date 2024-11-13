@@ -148,7 +148,14 @@ def unwrap_json_schema(schema):
                 ref_name = ref_path[-1]
                 return resolve_refs(defs[ref_name], defs)
             else:
-                return {k: resolve_refs(v, defs) for k, v in schema.items() if k not in ['required', 'title']}
+                resolved_schema = {}
+                for k,v in schema.items():
+                    if type(v) != list and type(v) != dict:
+                        if k not in ['required', 'title']:
+                            resolved_schema[k] = v
+                    else:
+                        resolved_schema[k] = resolve_refs(v, defs)
+                return resolved_schema
         elif isinstance(schema, list):
             return [resolve_refs(item, defs) for item in schema]
         else:
@@ -168,7 +175,14 @@ def unwrap_json_schema(schema):
                 combined_schema['type'] = types
                 return combined_schema
             else:
-                return {k: simplify_anyof(v) for k, v in schema.items() if k not in ['required', 'title']}
+                resolved_schema = {}
+                for k,v in schema.items():
+                    if type(v) != list and type(v) != dict:
+                        if k not in ['required,' 'title']:
+                            resolved_schema[k] = v
+                    else:
+                        resolved_schema[k] = simplify_anyof(v)
+                return resolved_schema
         elif isinstance(schema, list):
             return [simplify_anyof(item) for item in schema]
         else:
