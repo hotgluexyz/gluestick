@@ -324,8 +324,9 @@ def to_singer(
 
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
+    include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
 
-    if allow_objects and not catalog_schema:
+    if allow_objects and not (catalog_schema or include_all_unified_fields):
         df = df.dropna(how="all", axis=1)
 
     if catalog_schema:
@@ -347,8 +348,9 @@ def to_singer(
         with redirect_stdout(f):
             singer.write_schema(stream, header_map, keys)
             with Transformer() as transformer:
-                for i, row in df.iterrows():
-                    if not catalog_schema:
+                for _, row in df.iterrows():
+                    # keep null fields for catalog_schema and include_all_unified_fields
+                    if not (catalog_schema or include_all_unified_fields):
                         filtered_row = row.dropna()
                     else:
                         filtered_row = row.where(pd.notna(row), None)
