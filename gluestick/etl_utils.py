@@ -11,6 +11,7 @@ from pytz import utc
 import ast
 from gluestick.singer import to_singer
 import re
+from gluestick.reader import Reader
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -619,7 +620,11 @@ def to_export(
         composed_name = name
 
     if export_format == "singer":
-        to_singer(data, name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+        # get pk
+        reader = Reader()
+        keys = keys or reader.get_pk(name)
+        # export data as singer
+        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
     elif export_format == "parquet":
         if stringify_objects:
             data.to_parquet(
