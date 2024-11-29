@@ -10,6 +10,8 @@ from datetime import datetime
 from pytz import utc
 import ast
 from gluestick.singer import to_singer
+import re
+from gluestick.reader import Reader
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -422,6 +424,138 @@ def clean_obj_null_values(obj):
     else:
         return {}
 
+
+def get_index_safely(arr, index):
+    """Safely retrieves an item from an list by index.
+
+    Parameters
+    ----------
+    arr: list
+        List of items.
+    index: int
+        The index position of the item
+
+    Returns
+    -------
+    return: any
+        The item at the specified index, or `None` if the index is out of bounds.
+    """
+    try:
+        return arr[index]
+    except:
+        return None
+
+
+def build_string_format_variables(
+    default_kwargs=dict(), use_tenant_metadata=True, subtenant_delimiter="_"
+):
+    """Builds a dictionary of string format variables from multiple sources.
+
+    Parameters
+    ----------
+    default_kwargs : dict
+        A dictionary of default values for the format variables. Keys in this
+        dictionary are reserved and cannot be overridden by tenant metadata.
+    use_tenant_metadata : bool
+        Whether to include variables derived from tenant metadata. If True,
+        attempts to load metadata from the tenant configuration JSON file.
+    subtenant_delimiter : str
+        The delimiter used to split the `tenant_id` into root and sub-tenant
+        components.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the consolidated string format variables.
+
+    """
+    # Reserved keys are keys that may not be overriden by other sources of variabes (e.g., tenant metadata)
+    # The keys in the "default_kwargs" are chosen to be these reserved keys
+    reserved_keys = list(default_kwargs.keys())
+
+    final_kwargs = default_kwargs.copy()
+
+    # Build tenant metadata variable
+    tenant_metadata = dict()
+    if use_tenant_metadata:
+        tenant_metadata_path = (
+            f"{os.environ.get('ROOT')}/snapshots/tenant-config.json"
+        )
+        if os.path.exists(tenant_metadata_path):
+            with open(tenant_metadata_path, "r") as file:
+                tenant_metadata = json.load(file)
+        tenant_metadata = tenant_metadata.get("hotglue_metadata") or dict()
+        tenant_metadata = tenant_metadata.get("metadata") or dict()
+
+    # Iterate over "tenant_metadata" items and only add them in the "final_kwargs" if
+    # the key is not in the "reserved_keys"
+    for k, v in tenant_metadata.items():
+        if k in reserved_keys:
+            continue
+
+        final_kwargs[k] = v
+
+    flow_id = os.environ.get("FLOW")
+    job_id = os.environ.get("JOB_ID")
+    tap = os.environ.get("TAP")
+    connector = os.environ.get("CONNECTOR_ID")
+    tenant_id = os.environ.get("TENANT", "")
+    env_id = os.environ.get("ENV_ID")
+
+    splitted_tenant_id = tenant_id.split(subtenant_delimiter)
+    root_tenant_id = splitted_tenant_id[0]
+    sub_tenant_id = get_index_safely(splitted_tenant_id, 1) or ""
+
+    final_kwargs.update(
+        {
+            "tenant": tenant_id,
+            "tenant_id": tenant_id,
+            "root_tenant_id": root_tenant_id,
+            "sub_tenant_id": sub_tenant_id,
+            "env_id": env_id,
+            "flow_id": flow_id,
+            "job_id": job_id,
+            "tap": tap,
+            "connector": connector,
+        }
+    )
+
+    return final_kwargs
+
+
+def format_str_safely(str_to_format, **format_variables):
+    """Safely formats a string by replacing placeholders with provided values.
+
+    Notes
+    -----
+    - This function skips placeholders with missing or empty values in
+      `format_variables`.
+
+    Parameters
+    ----------
+    str_to_format : str
+        The string containing placeholders to be replaced. Placeholders
+        should be in the format `{key}`.
+    **format_variables : dict
+        Keyword arguments representing the variables to replace in the string.
+
+    Returns
+    -------
+    str
+        A formatted string with the placeholders replaced by their
+        corresponding values.
+
+    """
+    str_output = str_to_format
+
+    for k, v in format_variables.items():
+        if not v:
+            continue
+        str_output = re.sub(re.compile("{" + k + "}"), v, str_output)
+
+    return str_output
+
+
 def to_export(
     data,
     name,
@@ -432,6 +566,7 @@ def to_export(
     output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"),
     schema=None,
     stringify_objects=False,
+    reserved_variables={},
 ):
     """Parse a stringified dict or list of dicts.
 
@@ -460,6 +595,9 @@ def to_export(
     stringify_objects: bool
         for parquet files it will stringify complex structures as arrays
         of objects
+    reserved_variables: dict
+        A dictionary of default values for the format variables to be used
+        in the output_file_prefix.
 
     Returns
     -------
@@ -472,12 +610,21 @@ def to_export(
         name = os.environ[f"HG_UNIFIED_OUTPUT_{name.upper()}"]
 
     if output_file_prefix:
+        # format output_file_prefix with env variables
+        format_variables = build_string_format_variables(
+            default_kwargs=reserved_variables
+        )
+        output_file_prefix = format_str_safely(output_file_prefix, **format_variables)
         composed_name = f"{output_file_prefix}{name}"
     else:
         composed_name = name
 
     if export_format == "singer":
-        to_singer(data, name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+        # get pk
+        reader = Reader()
+        keys = keys or reader.get_pk(name)
+        # export data as singer
+        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
     elif export_format == "parquet":
         if stringify_objects:
             data.to_parquet(
