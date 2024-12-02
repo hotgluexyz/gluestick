@@ -5,10 +5,8 @@ import json
 import os
 
 import pandas as pd
-import pyarrow.parquet as pq
 from datetime import datetime
 from pytz import utc
-import ast
 from gluestick.singer import to_singer
 import re
 from gluestick.reader import Reader
