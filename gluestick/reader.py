@@ -74,6 +74,8 @@ class Reader:
                                 df[col] = df[col].astype('boolean')
                             elif str(dtype).lower() in ["int64"]:
                                 df[col] = df[col].astype('Int64')
+                            elif str(dtype).lower() in ["object", "string"]:
+                                df[col] = df[col].astype("string")
                         return df
                 except:
                     # NOTE: silencing errors to avoid breaking existing workflow
