@@ -136,7 +136,7 @@ def read_parquet_folder(path, ignore=[]):
 
         if entity_type not in results and entity_type not in ignore:
             df = pq.read_table(file, use_threads=False).to_pandas(safe=False, use_threads=False)
-            df = df.convert_dtypes()
+            # df = df.convert_dtypes()
             results[entity_type] = df
 
     return results
@@ -163,7 +163,7 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
     # Read snapshot file if it exists
     if os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.parquet"):
         snapshot = pq.read_table(f"{snapshot_dir}/{stream}.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
-        snapshot = snapshot.convert_dtypes()
+        # snapshot = snapshot.convert_dtypes()
     elif os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.csv"):
         snapshot = pd.read_csv(f"{snapshot_dir}/{stream}.snapshot.csv", **kwargs)
     else:
