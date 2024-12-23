@@ -215,10 +215,10 @@ def deep_convert_datetimes(value):
         return [deep_convert_datetimes(child) for child in value]
     elif isinstance(value, dict):
         return {k: deep_convert_datetimes(v) for k, v in value.items()}
-    elif isinstance(value, datetime.date):
-        return value.strftime("%Y-%m-%d")
     elif isinstance(value, datetime.datetime):
         return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    elif isinstance(value, datetime.date):
+        return value.strftime("%Y-%m-%d")
     return value
 
 def parse_objs(x):
