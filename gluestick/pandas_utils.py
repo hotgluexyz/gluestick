@@ -154,6 +154,10 @@ def enforce_exploded_col_types(df, column_name, stream=None):
 
     else:
         for col in  exploded_columns:
+            # if all column values are false let pandas infere type
+            if df[col].dropna().empty:
+                continue
+                
             first_non_null_value = df[col].dropna().iloc[0]
             if type(first_non_null_value) in [list, dict, str]:
                 continue
