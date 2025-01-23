@@ -1,6 +1,7 @@
 import os
 import json
 import pandas as pd
+from pandas.io.parsers import TextFileReader
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -91,7 +92,12 @@ class Reader:
         # if a date field value is empty read_csv will read it as "object"
         # make sure all date fields are typed as date
         for date_col in kwargs.get("parse_dates", []):
-            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            # needed to handle chunked CSVs properly
+            if isinstance(df, TextFileReader):
+                for d in df:
+                    d[date_col] = pd.to_datetime(d[date_col], errors='coerce')
+            else:
+                df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
         return df
 
     def get_metadata(self, stream):
