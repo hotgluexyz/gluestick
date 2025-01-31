@@ -262,7 +262,7 @@ def get_row_hash(row, columns):
     for col in columns:
         v = row[col]
 
-        if (not isinstance(v, list) and not pd.isna(v)) and v==v and (v not in [None, np.nan]):
+        if (isinstance(v, list) or not pd.isna(v)) and v==v and (v not in [None, np.nan]):
             values.append(str(v))
 
     row_str = "".join(values)
