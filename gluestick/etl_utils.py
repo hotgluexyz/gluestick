@@ -241,7 +241,7 @@ def snapshot_records(
         return snapshot
 
 
-def get_row_hash(row):
+def get_row_hash(row, columns):
     """Update a snapshot file.
 
     Parameters
@@ -255,8 +255,9 @@ def get_row_hash(row):
         A string with the hash for the row.
 
     """
-    row_str = "".join(row.astype(str).values).encode()
-    return hashlib.md5(row_str).hexdigest()
+    # ensure stable order
+    row_str = "".join(row[columns].astype(str).tolist())
+    return hashlib.md5(row_str.encode()).hexdigest()
 
 
 def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=False):
@@ -293,7 +294,11 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
         # PK needs to be unique, so we drop the duplicated values
         df = df.drop_duplicates(subset=pk)
 
-    df["hash"] = df.apply(get_row_hash, axis=1)
+    # get a sorted list of columns to build the hash
+    columns = list(df.columns)
+    columns.sort()
+
+    df["hash"] = df.apply(lambda row: get_row_hash(row, columns), axis=1)
     # If there is a snapshot file compare and filter the hash
     hash_df = None
     if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.parquet"):
