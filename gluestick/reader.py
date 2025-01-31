@@ -89,15 +89,16 @@ class Reader:
             types_params = self.get_types_from_catalog(catalog, stream)
             kwargs.update(types_params)
         df = pd.read_csv(filepath, **kwargs)
+
+        # needed to handle chunked CSVs properly
+        if isinstance(df, TextFileReader):
+            return df, kwargs.get("parse_dates", [])
+
         # if a date field value is empty read_csv will read it as "object"
         # make sure all date fields are typed as date
         for date_col in kwargs.get("parse_dates", []):
-            # needed to handle chunked CSVs properly
-            if isinstance(df, TextFileReader):
-                for d in df:
-                    d[date_col] = pd.to_datetime(d[date_col], errors='coerce')
-            else:
-                df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+
         return df
 
     def get_metadata(self, stream):
