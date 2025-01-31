@@ -5,6 +5,7 @@ import json
 import os
 
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from pytz import utc
 from gluestick.singer import to_singer
@@ -256,7 +257,15 @@ def get_row_hash(row, columns):
 
     """
     # ensure stable order
-    row_str = "".join(row[columns].astype(str).tolist())
+    values = []
+
+    for col in columns:
+        v = row[col]
+
+        if (not isinstance(v, list) and not pd.isna(v)) and v==v and (v not in [None, np.nan]):
+            values.append(str(v))
+
+    row_str = "".join(values)
     return hashlib.md5(row_str.encode()).hexdigest()
 
 
