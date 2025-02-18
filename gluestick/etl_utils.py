@@ -202,7 +202,6 @@ def snapshot_records(
     # If snapshot file and stream data exist update the snapshot
     if stream_data is not None and snapshot is not None:
         merged_data = pd.concat([snapshot, stream_data])
-        merged_data = merged_data.drop_duplicates(pk, keep="last")
         # coerce snapshot types to incoming data types
         if coerce_types:
             if not stream_data.empty and not snapshot.empty:
@@ -215,10 +214,14 @@ def snapshot_records(
                             merged_data[column] = merged_data[column].astype('boolean')
                         elif dtype in ["int64", "int32", "Int32", "Int64"]:
                             merged_data[column] = merged_data[column].astype("Int64")
+                        elif dtype == 'object':
+                            merged_data[column] = merged_data[column].astype(str)
                         else:
                             merged_data[column] = merged_data[column].astype(dtype)
                 except Exception as e:
                     raise Exception(f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}")
+        # drop duplicates
+        merged_data = merged_data.drop_duplicates(pk, keep="last")
         # export data
         if use_csv:
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
