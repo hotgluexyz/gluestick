@@ -97,7 +97,7 @@ class Reader:
         # if a date field value is empty read_csv will read it as "object"
         # make sure all date fields are typed as date
         for date_col in kwargs.get("parse_dates", []):
-            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce', utc=True)
 
         return df
 
