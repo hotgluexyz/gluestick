@@ -339,7 +339,7 @@ def to_singer(
     if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
         df = df.dropna(how="all", axis=1)
 
-    if catalog_schema:
+    if catalog_schema or catalog_stream:
         # it'll allow_objects but keeping all columns
         allow_objects = True
         # get schema from catalog
