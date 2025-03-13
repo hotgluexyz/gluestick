@@ -325,6 +325,11 @@ def to_singer(
         The output file name.
     allow_objects: boolean
         Allow or not objects to the parsed, if false defaults types to str.
+    keep_null_fields: boolean
+        Flag to keep all null fields
+    catalog_stream: str
+        Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
+        If this is not set it will use stream parameter to generate the catalog
 
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
