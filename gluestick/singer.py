@@ -306,6 +306,8 @@ def to_singer(
     allow_objects=False,
     schema=None,
     unified_model=None,
+    keep_null_fields=True,
+    catalog_stream=None
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -328,13 +330,15 @@ def to_singer(
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
 
-    if allow_objects and not (catalog_schema or include_all_unified_fields):
+    # drop columns with all null values except when we want to keep null fields
+    if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
         df = df.dropna(how="all", axis=1)
 
     if catalog_schema:
         # it'll allow_objects but keeping all columns
         allow_objects = True
         # get schema from catalog
+        stream = catalog_stream or stream
         schema = get_catalog_schema(stream)
         # parse all fields that are typed as objects or lists
         df = parse_df_cols(df, schema)
@@ -351,8 +355,8 @@ def to_singer(
             singer.write_schema(stream, header_map, keys)
             with Transformer() as transformer:
                 for _, row in df.iterrows():
-                    # keep null fields for catalog_schema and include_all_unified_fields
-                    if not (catalog_schema or include_all_unified_fields):
+                    # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
+                    if not (catalog_schema or include_all_unified_fields or keep_null_fields):
                         filtered_row = row.dropna()
                     else:
                         filtered_row = row.where(pd.notna(row), None)
