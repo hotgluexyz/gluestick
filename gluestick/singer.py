@@ -343,8 +343,8 @@ def to_singer(
         # it'll allow_objects but keeping all columns
         allow_objects = True
         # get schema from catalog
-        stream = catalog_stream or stream
-        schema = get_catalog_schema(stream)
+        stream_name = catalog_stream or stream
+        schema = get_catalog_schema(stream_name)
         # parse all fields that are typed as objects or lists
         df = parse_df_cols(df, schema)
 
