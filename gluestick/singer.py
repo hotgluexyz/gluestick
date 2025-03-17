@@ -306,6 +306,8 @@ def to_singer(
     allow_objects=False,
     schema=None,
     unified_model=None,
+    keep_null_fields=True,
+    catalog_stream=None
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -323,19 +325,26 @@ def to_singer(
         The output file name.
     allow_objects: boolean
         Allow or not objects to the parsed, if false defaults types to str.
+    keep_null_fields: boolean
+        Flag to keep all null fields
+    catalog_stream: str
+        Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
+        If this is not set it will use stream parameter to generate the catalog
 
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
 
-    if allow_objects and not (catalog_schema or include_all_unified_fields):
+    # drop columns with all null values except when we want to keep null fields
+    if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
         df = df.dropna(how="all", axis=1)
 
-    if catalog_schema:
+    if catalog_schema or catalog_stream:
         # it'll allow_objects but keeping all columns
         allow_objects = True
         # get schema from catalog
-        schema = get_catalog_schema(stream)
+        stream_name = catalog_stream or stream
+        schema = get_catalog_schema(stream_name)
         # parse all fields that are typed as objects or lists
         df = parse_df_cols(df, schema)
 
@@ -351,8 +360,8 @@ def to_singer(
             singer.write_schema(stream, header_map, keys)
             with Transformer() as transformer:
                 for _, row in df.iterrows():
-                    # keep null fields for catalog_schema and include_all_unified_fields
-                    if not (catalog_schema or include_all_unified_fields):
+                    # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
+                    if not (catalog_schema or include_all_unified_fields or keep_null_fields):
                         filtered_row = row.dropna()
                     else:
                         filtered_row = row.where(pd.notna(row), None)
