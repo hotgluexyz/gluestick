@@ -582,6 +582,7 @@ def to_export(
     schema=None,
     stringify_objects=False,
     reserved_variables={},
+    sync_stream_name=None
 ):
     """Parse a stringified dict or list of dicts.
 
@@ -613,6 +614,9 @@ def to_export(
     reserved_variables: dict
         A dictionary of default values for the format variables to be used
         in the output_file_prefix.
+    sync_stream_name: str
+        The name of the stream as it appears in the sync-output folder
+        default is None, which means that the name will be used as is
 
     Returns
     -------
@@ -624,6 +628,8 @@ def to_export(
     if os.environ.get(f"HG_UNIFIED_OUTPUT_{name.upper()}"):
         name = os.environ[f"HG_UNIFIED_OUTPUT_{name.upper()}"]
 
+    sync_stream_name = sync_stream_name or name
+    
     if output_file_prefix:
         # format output_file_prefix with env variables
         format_variables = build_string_format_variables(
@@ -637,7 +643,7 @@ def to_export(
     if export_format == "singer":
         # get pk
         reader = Reader()
-        keys = keys or reader.get_pk(name)
+        keys = keys or reader.get_pk(sync_stream_name)
         # export data as singer
         to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
     elif export_format == "parquet":
