@@ -582,6 +582,7 @@ def to_export(
     schema=None,
     stringify_objects=False,
     reserved_variables={},
+    trim_nested_nulls=False
 ):
     """Parse a stringified dict or list of dicts.
 
@@ -613,6 +614,8 @@ def to_export(
     reserved_variables: dict
         A dictionary of default values for the format variables to be used
         in the output_file_prefix.
+    trim_nested_nulls: bool
+        Flag for singer export to trim nulls from nested fields
 
     Returns
     -------
@@ -639,7 +642,7 @@ def to_export(
         reader = Reader()
         keys = keys or reader.get_pk(name)
         # export data as singer
-        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema, trim_nested_nulls=trim_nested_nulls)
     elif export_format == "parquet":
         if stringify_objects:
             data.to_parquet(
