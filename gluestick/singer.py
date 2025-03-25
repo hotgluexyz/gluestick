@@ -12,7 +12,7 @@ from gluestick.reader import Reader
 from singer import Transformer
 
 
-def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False):
+def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
     """Generate singer headers based on pandas types.
 
     Parameters
@@ -39,12 +39,13 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
             "format": "date-time",
             "type": ["string", "null"],
         },
+        "array": {"type": ["array", "null"], "items": {"type": ["object", "string", "null"]}},
     }
 
     if schema and not catalog_schema:
         header_map = schema
         return df, header_map
-    
+
     for col in df.columns:
         dtype = df[col].dtype.__str__().lower()
 
@@ -64,22 +65,25 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
                 first_value = value.iloc[0]
 
             if isinstance(first_value, list):
-                new_input = {}
-                for row in value:
-                    if len(row):
-                        for arr_value in row:
-                            if isinstance(arr_value, dict):
-                                temp_dict = {k:v for k, v in arr_value.items() if (k not in new_input.keys()) or isinstance(v, float)}
-                                new_input.update(temp_dict)
-                            else:
-                                new_input = arr_value        
-                _schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
-                header_map["properties"][col] = _schema
-                if not new_input:
-                    header_map["properties"][col] = {
-                            "items": type_mapping["str"],
-                            "type": ["array", "null"],
-                        } 
+                if recursive_typing:
+                    new_input = {}
+                    for row in value:
+                        if len(row):
+                            for arr_value in row:
+                                if isinstance(arr_value, dict):
+                                    temp_dict = {k:v for k, v in arr_value.items() if (k not in new_input.keys()) or isinstance(v, float)}
+                                    new_input.update(temp_dict)
+                                else:
+                                    new_input = arr_value
+                    _schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
+                    header_map["properties"][col] = _schema
+                    if not new_input:
+                        header_map["properties"][col] = {
+                                "items": type_mapping["str"],
+                                "type": ["array", "null"],
+                            }
+                else:
+                    header_map["properties"][col] = type_mapping["array"]
             elif isinstance(first_value, dict):
                 _schema = dict(type=["object", "null"], properties={})
                 for k, v in first_value.items():
@@ -98,7 +102,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
                 return x
 
             df[col] = df[col].apply(check_null)
-    
+
     # update schema using types from catalog and keeping extra columns not defined in catalog
     # i.e. tenant, sync_date, etc
     if catalog_schema:
