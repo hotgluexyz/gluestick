@@ -12,7 +12,7 @@ from gluestick.reader import Reader
 from singer import Transformer
 
 
-def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False):
+def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
     """Generate singer headers based on pandas types.
 
     Parameters
@@ -39,12 +39,13 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
             "format": "date-time",
             "type": ["string", "null"],
         },
+        "array": {"type": ["array", "null"], "items": {"type": ["object", "string", "null"]}},
     }
 
     if schema and not catalog_schema:
         header_map = schema
         return df, header_map
-    
+
     for col in df.columns:
         dtype = df[col].dtype.__str__().lower()
 
@@ -64,22 +65,25 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
                 first_value = value.iloc[0]
 
             if isinstance(first_value, list):
-                new_input = {}
-                for row in value:
-                    if len(row):
-                        for arr_value in row:
-                            if isinstance(arr_value, dict):
-                                temp_dict = {k:v for k, v in arr_value.items() if (k not in new_input.keys()) or isinstance(v, float)}
-                                new_input.update(temp_dict)
-                            else:
-                                new_input = arr_value        
-                _schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
-                header_map["properties"][col] = _schema
-                if not new_input:
-                    header_map["properties"][col] = {
-                            "items": type_mapping["str"],
-                            "type": ["array", "null"],
-                        } 
+                if recursive_typing:
+                    new_input = {}
+                    for row in value:
+                        if len(row):
+                            for arr_value in row:
+                                if isinstance(arr_value, dict):
+                                    temp_dict = {k:v for k, v in arr_value.items() if (k not in new_input.keys()) or isinstance(v, float)}
+                                    new_input.update(temp_dict)
+                                else:
+                                    new_input = arr_value
+                    _schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
+                    header_map["properties"][col] = _schema
+                    if not new_input:
+                        header_map["properties"][col] = {
+                                "items": type_mapping["str"],
+                                "type": ["array", "null"],
+                            }
+                else:
+                    header_map["properties"][col] = type_mapping["array"]
             elif isinstance(first_value, dict):
                 _schema = dict(type=["object", "null"], properties={})
                 for k, v in first_value.items():
@@ -98,7 +102,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
                 return x
 
             df[col] = df[col].apply(check_null)
-    
+
     # update schema using types from catalog and keeping extra columns not defined in catalog
     # i.e. tenant, sync_date, etc
     if catalog_schema:
@@ -307,7 +311,8 @@ def to_singer(
     schema=None,
     unified_model=None,
     keep_null_fields=True,
-    catalog_stream=None
+    catalog_stream=None,
+    recursive_typing=True
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -330,7 +335,9 @@ def to_singer(
     catalog_stream: str
         Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
         If this is not set it will use stream parameter to generate the catalog
-
+    recursive_typing: boolean
+        If true, the function will recursively convert arrays of objects to arrays of primitives.
+        If false, the function will fuzzy list types when generating singer header.
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
@@ -351,7 +358,7 @@ def to_singer(
     elif unified_model:
         schema = unwrap_json_schema(unified_model.model_json_schema())
 
-    df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema)
+    df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema, recursive_typing=recursive_typing)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
 
