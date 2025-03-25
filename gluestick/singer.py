@@ -311,7 +311,8 @@ def to_singer(
     schema=None,
     unified_model=None,
     keep_null_fields=True,
-    catalog_stream=None
+    catalog_stream=None,
+    recursive_typing=True
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -334,7 +335,9 @@ def to_singer(
     catalog_stream: str
         Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
         If this is not set it will use stream parameter to generate the catalog
-
+    recursive_typing: boolean
+        If true, the function will recursively convert arrays of objects to arrays of primitives.
+        If false, the function will fuzzy list types when generating singer header.
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
@@ -355,7 +358,7 @@ def to_singer(
     elif unified_model:
         schema = unwrap_json_schema(unified_model.model_json_schema())
 
-    df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema)
+    df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema, recursive_typing=recursive_typing)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
 
