@@ -169,7 +169,7 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 
 def snapshot_records(
-    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, **kwargs
+    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, **kwargs
 ):
     """Update a snapshot file.
 
@@ -187,6 +187,8 @@ def snapshot_records(
         Return just the input data if True, else returns the whole data
     coerce_types: bool
         Coerces types to the stream_data types if True, else mantains current snapshot types
+    localize_datetime_types: bool
+        Localizes datetime columns to UTC if True, else mantains current snapshot types
     **kwargs:
         Additional arguments that are passed to pandas read_csv.
 
@@ -201,13 +203,20 @@ def snapshot_records(
 
     # If snapshot file and stream data exist update the snapshot
     if stream_data is not None and snapshot is not None:
+        snapshot_types = snapshot.dtypes
+
+        if localize_datetime_types:
+            # Localize datetime columns to UTC (datetime64[ns, UTC]) if they are not already
+            for column, dtype in snapshot_types.items():
+                if dtype == "datetime64[ns]":
+                    snapshot[column] = localize_datetime(snapshot, column)
+
         merged_data = pd.concat([snapshot, stream_data])
         # coerce snapshot types to incoming data types
         if coerce_types:
             if not stream_data.empty and not snapshot.empty:
                 # Save incoming data types
                 df_types = stream_data.dtypes
-                snapshot_types = snapshot.dtypes
                 try:
                     for column, dtype in df_types.items():
                         if dtype == 'bool':
