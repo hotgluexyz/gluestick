@@ -347,7 +347,7 @@ def to_singer(
     unified_model=None,
     keep_null_fields=True,
     catalog_stream=None,
-    trim_nested_nulls=False
+    trim_nested_nulls=False,
     recursive_typing=True
 ):
     """Convert a pandas DataFrame into a singer file.
