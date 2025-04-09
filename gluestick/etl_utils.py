@@ -516,8 +516,17 @@ class Reader:
         if filepath.endswith(".parquet"):
             return pd.read_parquet(filepath, use_nullable_dtypes=True, **kwargs)
         catalog = self.read_catalog()
+        def safe_parse_date(col):
+            try:
+                return pd.to_datetime(col, errors="coerce")
+            except:
+                return pd.NaT
+            
         if catalog and catalog_types:
             types_params = self.get_types_from_catalog(catalog, stream)
+            parse_dates = types_params.pop("parse_dates", None)
+            if parse_dates:
+                types_params["converters"] = {col: safe_parse_date for col in parse_dates}
             kwargs.update(types_params)
         return pd.read_csv(filepath, **kwargs)
 
