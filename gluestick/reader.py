@@ -125,9 +125,9 @@ class Reader:
 
             if catalog is not None:
                 streams = next(
-                    c for c in catalog["streams"] if c.get("stream") == stream
+                    (c for c in catalog["streams"] if c.get("stream") == stream), None
                 )
-                if streams.get("metadata"):
+                if streams and streams.get("metadata"):
                     breadcrumb = next(
                         s for s in streams["metadata"] if not s["breadcrumb"]
                     )
