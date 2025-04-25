@@ -1,10 +1,11 @@
 """Singer related util functions."""
 
 import ast
-import datetime
+import datetime as dtime
 import json
 import os
 from contextlib import redirect_stdout
+from typing import Any, Dict
 
 import pandas as pd
 import singer
@@ -12,7 +13,13 @@ from gluestick.reader import Reader
 from singer import Transformer
 
 
-def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
+def gen_singer_header(
+    df: pd.DataFrame,
+    allow_objects: bool,
+    schema=None,
+    catalog_schema=False,
+    recursive_typing=True,
+):
     """Generate singer headers based on pandas types.
 
     Parameters
@@ -21,6 +28,12 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
         The dataframe to extranct the types from.
     allow_objects: bool
         If the function should proccess objects in the columns.
+    schema: dict
+        Schema to be used to generate the singer header.
+    catalog_schema: bool
+        If the function should use the catalog schema to generate the schema.
+    recursive_typing: bool
+        If nested objects should be recursively typed.
 
     Returns
     -------
@@ -28,7 +41,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
         Dict of pandas.DataFrames. the keys of which are the entity names
 
     """
-    header_map = dict(type=["object", "null"], properties={})
+    header_map: Dict[str, Any] = dict(type=["object", "null"], properties={})
 
     type_mapping = {
         "float": {"type": ["number", "null"]},
@@ -39,7 +52,10 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
             "format": "date-time",
             "type": ["string", "null"],
         },
-        "array": {"type": ["array", "null"], "items": {"type": ["object", "string", "null"]}},
+        "array": {
+            "type": ["array", "null"],
+            "items": {"type": ["object", "string", "null"]},
+        },
     }
 
     if schema and not catalog_schema:
@@ -66,22 +82,29 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
 
             if isinstance(first_value, list):
                 if recursive_typing:
-                    new_input = {}
+                    new_input: Dict = {}
                     for row in value:
                         if len(row):
                             for arr_value in row:
                                 if isinstance(arr_value, dict):
-                                    temp_dict = {k:v for k, v in arr_value.items() if (k not in new_input.keys()) or isinstance(v, float)}
+                                    temp_dict = {
+                                        k: v
+                                        for k, v in arr_value.items()
+                                        if (k not in new_input.keys())
+                                        or isinstance(v, float)
+                                    }
                                     new_input.update(temp_dict)
                                 else:
                                     new_input = arr_value
-                    _schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
+                    _schema = dict(
+                        type=["array", "null"], items=to_singer_schema(new_input)
+                    )
                     header_map["properties"][col] = _schema
                     if not new_input:
                         header_map["properties"][col] = {
-                                "items": type_mapping["str"],
-                                "type": ["array", "null"],
-                            }
+                            "items": type_mapping["str"],
+                            "type": ["array", "null"],
+                        }
                 else:
                     header_map["properties"][col] = type_mapping["array"]
             elif isinstance(first_value, dict):
@@ -145,17 +168,31 @@ def to_singer_schema(input):
 
 
 def unwrap_json_schema(schema):
+    """Unwrap a json schema.
+
+    Parameters
+    ----------
+    schema: dict
+        Schema to unwrap.
+
+    Returns
+    -------
+    return: dict
+        Unwrapped schema.
+
+    """
+
     def resolve_refs(schema, defs):
         if isinstance(schema, dict):
-            if '$ref' in schema:
-                ref_path = schema['$ref'].split('/')
+            if "$ref" in schema:
+                ref_path = schema["$ref"].split("/")
                 ref_name = ref_path[-1]
                 return resolve_refs(defs[ref_name], defs)
             else:
                 resolved_schema = {}
-                for k,v in schema.items():
+                for k, v in schema.items():
                     if type(v) != list and type(v) != dict:
-                        if k not in ['required', 'title']:
+                        if k not in ["required", "title"]:
                             resolved_schema[k] = v
                     else:
                         resolved_schema[k] = resolve_refs(v, defs)
@@ -167,22 +204,22 @@ def unwrap_json_schema(schema):
 
     def simplify_anyof(schema):
         if isinstance(schema, dict):
-            if 'anyOf' in schema:
-                types = [item.get('type') for item in schema['anyOf'] if 'type' in item]
+            if "anyOf" in schema:
+                types = [item.get("type") for item in schema["anyOf"] if "type" in item]
 
                 # Handle cases where anyOf contains more than just type definitions
                 # For example, when it includes properties or other nested structures
                 combined_schema = {}
-                for item in schema['anyOf']:
+                for item in schema["anyOf"]:
                     for key, value in item.items():
                         combined_schema[key] = simplify_anyof(value)
-                combined_schema['type'] = types
+                combined_schema["type"] = types
                 return combined_schema
             else:
                 resolved_schema = {}
-                for k,v in schema.items():
+                for k, v in schema.items():
                     if type(v) != list and type(v) != dict:
-                        if k not in ['required,' 'title']:
+                        if k not in ["required," "title"]:
                             resolved_schema[k] = v
                     else:
                         resolved_schema[k] = simplify_anyof(v)
@@ -192,7 +229,7 @@ def unwrap_json_schema(schema):
         else:
             return schema
 
-    defs = schema.get('$defs', {})
+    defs = schema.get("$defs", {})
     resolved_schema = resolve_refs(schema, defs)
     simplified_schema = simplify_anyof(resolved_schema)
     simplified_schema.pop("$defs", None)
@@ -209,6 +246,7 @@ def deep_convert_datetimes(value):
     Parameters
     ----------
     value: list, dict, datetime
+        Value to convert.
 
     Returns
     -------
@@ -219,11 +257,12 @@ def deep_convert_datetimes(value):
         return [deep_convert_datetimes(child) for child in value]
     elif isinstance(value, dict):
         return {k: deep_convert_datetimes(v) for k, v in value.items()}
-    elif isinstance(value, datetime.datetime):
+    elif isinstance(value, dtime.datetime):
         return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    elif isinstance(value, datetime.date):
+    elif isinstance(value, dtime.date):
         return value.strftime("%Y-%m-%d")
     return value
+
 
 def parse_objs(x):
     """Parse a stringified dict or list of dicts.
@@ -275,7 +314,11 @@ def get_catalog_schema(stream):
         # need to ensure every array type has an items dict or we'll have issues
         for p in schema.get("properties", dict()):
             prop = schema["properties"][p]
-            if prop.get("type") == "array" or "array" in prop.get("type") and prop.get("items") is None:
+            if (
+                prop.get("type") == "array"
+                or "array" in prop.get("type")
+                and prop.get("items") is None
+            ):
                 prop["items"] = dict()
     return schema
 
@@ -285,18 +328,18 @@ def parse_df_cols(df, schema):
 
     Parameters
     ----------
-    stream: str
-        Stream name in catalog.
+    df: pd.DataFrame
+        Dataframe to parse.
     schema: dict
         Schema that will be used to export the data.
 
     """
     for col in df.columns:
         col_type = schema["properties"].get(col, {}).get("type", [])
-        if (isinstance(col_type, list) and any(
-            item in ["object", "array"]
-            for item in col_type
-        )) or col_type in ["object", "array"]:
+        if (
+            isinstance(col_type, list)
+            and any(item in ["object", "array"] for item in col_type)
+        ) or col_type in ["object", "array"]:
             df[col] = df[col].apply(lambda x: parse_objs(x))
     return df
 
@@ -312,7 +355,7 @@ def to_singer(
     unified_model=None,
     keep_null_fields=True,
     catalog_stream=None,
-    recursive_typing=True
+    recursive_typing=True,
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -338,12 +381,21 @@ def to_singer(
     recursive_typing: boolean
         If true, the function will recursively convert arrays of objects to arrays of primitives.
         If false, the function will fuzzy list types when generating singer header.
+    schema: dict
+        Schema to be used to generate the singer header.
+    unified_model: dict
+        Unified model to be used to generate the singer header.
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
-    include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
+    include_all_unified_fields = (
+        os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true"
+        and unified_model is not None
+    )
 
     # drop columns with all null values except when we want to keep null fields
-    if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
+    if allow_objects and not (
+        catalog_schema or include_all_unified_fields or keep_null_fields
+    ):
         df = df.dropna(how="all", axis=1)
 
     if catalog_schema or catalog_stream:
@@ -358,7 +410,9 @@ def to_singer(
     elif unified_model:
         schema = unwrap_json_schema(unified_model.model_json_schema())
 
-    df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema, recursive_typing=recursive_typing)
+    df, header_map = gen_singer_header(
+        df, allow_objects, schema, catalog_schema, recursive_typing=recursive_typing
+    )
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
 
@@ -368,7 +422,9 @@ def to_singer(
             with Transformer() as transformer:
                 for _, row in df.iterrows():
                     # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
-                    if not (catalog_schema or include_all_unified_fields or keep_null_fields):
+                    if not (
+                        catalog_schema or include_all_unified_fields or keep_null_fields
+                    ):
                         filtered_row = row.dropna()
                     else:
                         filtered_row = row.where(pd.notna(row), None)

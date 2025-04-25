@@ -4,8 +4,8 @@ import ast
 
 import numpy as np
 import pandas as pd
-from pandas.io.json._normalize import nested_to_record
 from gluestick.reader import Reader
+from pandas.io.json._normalize import nested_to_record
 
 
 def json_tuple_to_cols(
@@ -111,6 +111,7 @@ def rename(df, target_columns):
             return df[target_column_names].rename(columns=target_columns)
     return df
 
+
 def enforce_exploded_col_types(df, column_name, stream=None):
     """Enforce types for columns created by exploded fields for better consistency.
 
@@ -128,17 +129,21 @@ def enforce_exploded_col_types(df, column_name, stream=None):
     stream: str
         Stream name to enforce types using catalog typing
     """
-    
     # enforce types for booleans and integers
     field_schema = None
     exploded_columns = [col for col in df.columns if col.startswith(f"{column_name}.")]
-    
+
     if stream:
         input = Reader()
         catalog = input.read_catalog()
         stream_schema = [s for s in catalog["streams"] if s["tap_stream_id"] == stream]
         if stream_schema:
-            field_schema = stream_schema[0].get("schema", {}).get("properties", {}).get(column_name)
+            field_schema = (
+                stream_schema[0]
+                .get("schema", {})
+                .get("properties", {})
+                .get(column_name)
+            )
 
     if field_schema and "properties" in field_schema:
         for col in exploded_columns:
@@ -146,27 +151,29 @@ def enforce_exploded_col_types(df, column_name, stream=None):
             col_type = field_schema.get("properties").get(col_name, {}).get("type")
             if isinstance(col_type, list) and col_type:
                 col_type = next(iter([t for t in col_type if t != "null"]), None)
-            if col_type:          
+            if col_type:
                 if col_type in ["bool", "boolean"]:
                     df[col] = df[col].astype("boolean")
-                elif  col_type in ["int", "integer"]:
+                elif col_type in ["int", "integer"]:
                     df[col] = df[col].astype("Int64")
 
     else:
-        for col in  exploded_columns:
+        for col in exploded_columns:
             # if all column values are false let pandas infere type
             if df[col].dropna().empty:
                 continue
-                
+
             first_non_null_value = df[col].dropna().iloc[0]
             if type(first_non_null_value) in [list, dict, str]:
                 continue
             # if all not null fields are bool type column as boolean
-            are_all_boolean = df[col].dropna().apply(lambda x: isinstance(x, bool)).all()
+            are_all_boolean = (
+                df[col].dropna().apply(lambda x: isinstance(x, bool)).all()
+            )
             if are_all_boolean:
                 df[col] = df[col].astype("boolean")
                 continue
-            # Enforcing only boolean types if "field_schema" is not present, 
+            # Enforcing only boolean types if "field_schema" is not present,
             # as pandas automatically converts integers with NaN values (e.g., 2 to 2.0),
     return df
 
@@ -295,14 +302,12 @@ def explode_json_to_rows(df, column_name, drop=True, stream=None, **kwargs):
 
 
 def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
-    """Convert a JSON column that has an array value into a DataFrame.
+    """Modifies a dataframe by expanding each field in a JSON column to its own column.
 
     Notes
     -----
-    Arrays such as [{"Name": "First", "Value": "Jo"},{"Name": "Last", "Value": "Do"}]
-    with a column for each value are converted to pandas DataFrame. Note that the new
-    series produced from the JSON will be de-duplicated and inner joined with the
-    index.
+    JSON values such as {"First": "John", "Last": "Doe"}
+    are converted to two columns: "First" and "Last" with values "John" and "Doe" respectively.
 
     Parameters
     ----------
@@ -322,7 +327,7 @@ def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
     --------
     IN[5]: explode_json_to_cols(df, 'ProductRef' )
     an example of the ProductRef would be:
-    {"value": "Hi Tea Chipper","name": "Product"},
+    {"Product": "Hi Tea Chipper"},
     Out[5]:
     Product
     Index

@@ -21,8 +21,8 @@ class TestETL(object):
 
         # Read data
         dirname = os.path.dirname(__file__)
-        df = pd.read_excel(
-            os.path.join(dirname, "data/input/json_to_cols.xlsx"), index_col=0
+        df = pd.read_csv(
+            os.path.join(dirname, "data/input/json_to_cols.csv"), index_col=0
         )
         expected_df = pd.read_csv(
             os.path.join(dirname, "data/output/json_to_cols.csv"), index_col=0
@@ -42,8 +42,8 @@ class TestETL(object):
 
         # Read data
         dirname = os.path.dirname(__file__)
-        df = pd.read_excel(
-            os.path.join(dirname, "data/input/json_to_cols_unique.xlsx"), index_col=0
+        df = pd.read_csv(
+            os.path.join(dirname, "data/input/json_to_cols_unique.csv"), index_col=0
         )
         expected_df = pd.read_csv(
             os.path.join(dirname, "data/output/json_to_cols_unique.csv"), index_col=0
@@ -63,8 +63,8 @@ class TestETL(object):
 
         # Read data
         dirname = os.path.dirname(__file__)
-        df = pd.read_excel(
-            os.path.join(dirname, "data/input/json_to_rows.xlsx"), index_col=0
+        df = pd.read_csv(
+            os.path.join(dirname, "data/input/json_to_rows.csv"), index_col=0
         )
         expected_df = pd.read_csv(
             os.path.join(dirname, "data/output/json_to_rows.csv"), index_col=0
@@ -83,8 +83,8 @@ class TestETL(object):
 
         # Read data
         dirname = os.path.dirname(__file__)
-        df = pd.read_excel(
-            os.path.join(dirname, "data/input/multi_json.xlsx"), index_col=0
+        df = pd.read_csv(
+            os.path.join(dirname, "data/input/multi_json.csv"), index_col=0
         )
         expected_df = (
             pd.read_csv(
