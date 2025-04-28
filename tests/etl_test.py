@@ -1,9 +1,8 @@
 import os
-
-import gluestick
+import json
+import gluestick as gs
 import pandas as pd
 import pytest
-
 
 # Tests gluestick ETL utilities
 class TestETL(object):
@@ -29,8 +28,8 @@ class TestETL(object):
         )
 
         # Explode
-        r = gluestick.array_to_dict_reducer("Name", "StringValue")
-        df2 = gluestick.explode_json_to_cols(df, "Metadata", reducer=r)
+        r = gs.array_to_dict_reducer("Name", "StringValue")
+        df2 = gs.explode_json_to_cols(df, "Metadata", reducer=r)
         print(df2)
 
         assert df2.equals(expected_df)
@@ -50,7 +49,7 @@ class TestETL(object):
         )
 
         # Explode
-        df2 = gluestick.explode_json_to_cols(df, "Metadata")
+        df2 = gs.explode_json_to_cols(df, "Metadata")
         print(df2)
 
         assert df2.equals(expected_df)
@@ -71,7 +70,7 @@ class TestETL(object):
         ).astype({"Line Detail.Id": "float64"})
 
         # Explode
-        df2 = gluestick.explode_json_to_rows(df, "Line Detail").astype(
+        df2 = gs.explode_json_to_rows(df, "Line Detail").astype(
             {"Line Detail.Id": "float64"}
         )
         assert df2.equals(expected_df)
@@ -96,11 +95,11 @@ class TestETL(object):
 
         transformed_df = (
             df.pipe(
-                gluestick.explode_json_to_cols,
+                gs.explode_json_to_cols,
                 "Metadata",
-                reducer=gluestick.array_to_dict_reducer("Name", "StringValue"),
+                reducer=gs.array_to_dict_reducer("Name", "StringValue"),
             )
-            .pipe(gluestick.explode_json_to_rows, "LineDetail")
+            .pipe(gs.explode_json_to_rows, "LineDetail")
             .pipe(lambda x: x.astype({"LineDetail.Id": "float64"}))
             .pipe(lambda x: x.sort_index(axis=1))
         )
@@ -108,11 +107,11 @@ class TestETL(object):
 
         # changing order should not matter
         transformed_df = (
-            df.pipe(gluestick.explode_json_to_rows, "LineDetail")
+            df.pipe(gs.explode_json_to_rows, "LineDetail")
             .pipe(
-                gluestick.explode_json_to_cols,
+                gs.explode_json_to_cols,
                 "Metadata",
-                reducer=gluestick.array_to_dict_reducer("Name", "StringValue"),
+                reducer=gs.array_to_dict_reducer("Name", "StringValue"),
             )
             .pipe(lambda x: x.astype({"LineDetail.Id": "float64"}))
             .pipe(lambda x: x.sort_index(axis=1))
@@ -120,3 +119,108 @@ class TestETL(object):
         assert transformed_df.equals(expected_df)
 
         print("test_explode_multi output is correct")
+
+
+    def test_to_singer(self, tmp_path):
+        print("=====")
+        print("test_to_singer")
+        dir_name = os.path.dirname(__file__)
+        input = gs.Reader(dir=os.path.join(dir_name, "data/input"))
+
+        campaign_parquet_df = input.get("campaign_performance")
+        campaign_csv_df = input.get("campaign_csv")
+
+        # Define stream name and output file
+        stream_name = "campaign_performance"
+        output_dir = tmp_path
+
+        true_output_data = {}
+        
+
+        singer_output_path = os.path.join(dir_name, "data/output/data.singer")
+        csv_csv_output_path = os.path.join(dir_name, "data/output/campaign_performance_csv.csv")
+        parquet_csv_output_path = os.path.join(dir_name, "data/output/campaign_performance_parquet.csv")
+
+        parquet_parquet_output_path = os.path.join(dir_name, "data/output/campaign_performance_parquet.parquet")
+        csv_parquet_output_path = os.path.join(dir_name, "data/output/campaign_performance_csv.parquet")
+        true_output_data["singer"] = open(singer_output_path, "r").read()
+
+
+
+
+        for type, df, output_csv_path, output_parquet_path in [("parquet", campaign_parquet_df, parquet_csv_output_path, parquet_parquet_output_path), ("csv", campaign_csv_df, csv_csv_output_path, csv_parquet_output_path)]:
+
+            # Read the output file
+            singer_output_file = output_dir / "data.singer"
+            if singer_output_file.exists():
+                singer_output_file.unlink()
+            
+            # Test singer export
+            gs.to_export(
+                data=campaign_parquet_df,
+                name=stream_name,
+                output_dir=output_dir,
+                keys=["id"]
+            )
+
+            assert singer_output_file.exists(), f"{type} -> Singer Output file {singer_output_file} does not exist."
+
+            with open(singer_output_file, "r") as f:
+                test_lines = [json.loads(line) for line in f if line.strip()]
+
+            with open(singer_output_path, "r") as f:
+                true_lines = [json.loads(line) for line in f if line.strip()]
+            
+            assert test_lines == true_lines, f"{type} -> Singer output is incorrect"
+
+            # Test CSV Export
+            csv_output_file = output_dir / "campaign_performance.csv"
+            if csv_output_file.exists():
+                csv_output_file.unlink()
+            
+            gs.to_export(
+                data=df,
+                name=stream_name,
+                output_dir=output_dir,
+                export_format="csv",
+                keys=["id"]
+            )
+
+            test_output_df = pd.read_csv(csv_output_file)
+            true_output_df = pd.read_csv(output_csv_path)
+
+            assert csv_output_file.exists(), f"{type} -> CSV Output file {csv_output_file} does not exist."
+
+            assert test_output_df.equals(true_output_df), f"{type} -> CSV output is incorrect"
+
+
+            # Test parquet export
+            parquet_output_file = output_dir / "campaign_performance.parquet"
+            if parquet_output_file.exists():
+                parquet_output_file.unlink()
+
+            true_output_df = pd.read_parquet(path=output_parquet_path)
+            
+            gs.to_export(
+                data=df,
+                name=stream_name,
+                output_dir=output_dir,
+                export_format="parquet",
+                keys=["id"]
+            )
+
+            test_output_df = pd.read_parquet(path=parquet_output_file)
+
+            assert parquet_output_file.exists(), f"{type} -> Parquet Output file {parquet_output_file} does not exist."
+
+            for col in test_output_df.columns:
+                print("Dtype in test: ", test_output_df[col].dtype)
+                print("Dtype in true: ", true_output_df[col].dtype)
+                assert test_output_df[col].equals(true_output_df[col]), f"{type} -> Column {col} is incorrect"
+
+
+
+
+
+
+        print("test to_export output is correct")
