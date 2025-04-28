@@ -1,0 +1,6 @@
+Customer Name,Line Detail
+Company 1,"[ {""Id"": ""1"", ""Desc"": ""Bolts"", ""Amount"": 101.15}, {""Id"": ""2"", ""Desc"": ""Smith"", ""Amount"": 90.80} ]"
+Company 2,"[ {""Id"": ""1"", ""Desc"": ""Braces"", ""Amount"": 51.15}, {""Id"": ""2"", ""Desc"": ""Wood"", ""Amount"": 190.10} ]"
+Company 3,"[{""Id"": ""1"", ""Desc"": ""Braces"", ""Amount"": 51.15}]"
+Company 4,
+Company 5,"{""Id"": ""1"", ""Desc"": ""Braces"", ""Amount"": 51.15}"

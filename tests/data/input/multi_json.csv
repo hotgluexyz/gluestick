@@ -1,0 +1,3 @@
+CompanyId,Customer Name,Metadata,LineDetail,Total
+100,Company 1,"{""FirstName"": ""John"", ""LastName"": ""Smith""}","[ {""Id"": ""1"", ""Desc"": ""Bolts"", ""Amount"": 101.15}, {""Id"": ""2"", ""Desc"": ""Smith"", ""Amount"": 90.80} ]",191.95
+200,Company 2,"{""FirstName"": ""Jane"", ""LastName"": ""Smith""}","[ {""Id"": ""1"", ""Desc"": ""Braces"", ""Amount"": 51.15}, {""Id"": ""2"", ""Desc"": ""Wood"", ""Amount"": 190.10} ]",241.25
