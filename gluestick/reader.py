@@ -1,6 +1,7 @@
 import os
 import json
 import pandas as pd
+from pandas.io.parsers import TextFileReader
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -74,6 +75,8 @@ class Reader:
                                 df[col] = df[col].astype('boolean')
                             elif str(dtype).lower() in ["int64"]:
                                 df[col] = df[col].astype('Int64')
+                            elif str(dtype).lower() in ["object", "string"]:
+                                df[col] = df[col].astype("string")
                         return df
                 except:
                     # NOTE: silencing errors to avoid breaking existing workflow
@@ -86,10 +89,16 @@ class Reader:
             types_params = self.get_types_from_catalog(catalog, stream)
             kwargs.update(types_params)
         df = pd.read_csv(filepath, **kwargs)
+
+        # needed to handle chunked CSVs properly
+        if isinstance(df, TextFileReader):
+            return df, kwargs.get("parse_dates", [])
+
         # if a date field value is empty read_csv will read it as "object"
         # make sure all date fields are typed as date
         for date_col in kwargs.get("parse_dates", []):
-            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce', utc=True)
+
         return df
 
     def get_metadata(self, stream):
@@ -107,7 +116,7 @@ class Reader:
     def get_pk(self, stream):
         """Get pk from parquet file or catalog if available."""
         key_properties = []
-        if self.read_directories().get(stream).endswith(".parquet"):
+        if self.read_directories().get(stream, "").endswith(".parquet"):
             metadata = self.get_metadata(stream)
             if metadata.get("key_properties"):
                 key_properties = eval(metadata["key_properties"])
@@ -116,9 +125,9 @@ class Reader:
 
             if catalog is not None:
                 streams = next(
-                    c for c in catalog["streams"] if c.get("stream") == stream
+                    (c for c in catalog["streams"] if c.get("stream") == stream), None
                 )
-                if streams.get("metadata"):
+                if streams and streams.get("metadata"):
                     breadcrumb = next(
                         s for s in streams["metadata"] if not s["breadcrumb"]
                     )

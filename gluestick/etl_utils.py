@@ -5,8 +5,8 @@ import json
 import os
 
 import pandas as pd
-import pyarrow as pa
 import pyarrow.parquet as pq
+import numpy as np
 from datetime import datetime
 from pytz import utc
 from gluestick.singer import to_singer
@@ -173,7 +173,7 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 
 def snapshot_records(
-    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, **kwargs
+    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, **kwargs
 ):
     """Update a snapshot file.
 
@@ -191,6 +191,8 @@ def snapshot_records(
         Return just the input data if True, else returns the whole data
     coerce_types: bool
         Coerces types to the stream_data types if True, else mantains current snapshot types
+    localize_datetime_types: bool
+        Localizes datetime columns to UTC if True, else mantains current snapshot types
     **kwargs:
         Additional arguments that are passed to pandas read_csv.
 
@@ -205,24 +207,34 @@ def snapshot_records(
 
     # If snapshot file and stream data exist update the snapshot
     if stream_data is not None and snapshot is not None:
+        snapshot_types = snapshot.dtypes
+
+        if localize_datetime_types:
+            # Localize datetime columns to UTC (datetime64[ns, UTC]) if they are not already
+            for column, dtype in snapshot_types.items():
+                if dtype == "datetime64[ns]":
+                    snapshot[column] = localize_datetime(snapshot, column)
+
         merged_data = pd.concat([snapshot, stream_data])
-        merged_data = merged_data.drop_duplicates(pk, keep="last")
         # coerce snapshot types to incoming data types
         if coerce_types:
             if not stream_data.empty and not snapshot.empty:
                 # Save incoming data types
                 df_types = stream_data.dtypes
-                snapshot_types = snapshot.dtypes
                 try:
                     for column, dtype in df_types.items():
                         if dtype == 'bool':
                             merged_data[column] = merged_data[column].astype('boolean')
                         elif dtype in ["int64", "int32", "Int32", "Int64"]:
                             merged_data[column] = merged_data[column].astype("Int64")
+                        elif dtype == 'object':
+                            merged_data[column] = merged_data[column].astype(str)
                         else:
                             merged_data[column] = merged_data[column].astype(dtype)
                 except Exception as e:
                     raise Exception(f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}")
+        # drop duplicates
+        merged_data = merged_data.drop_duplicates(pk, keep="last")
         # export data
         if use_csv:
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
@@ -246,7 +258,7 @@ def snapshot_records(
         return snapshot
 
 
-def get_row_hash(row):
+def get_row_hash(row, columns):
     """Update a snapshot file.
 
     Parameters
@@ -260,8 +272,17 @@ def get_row_hash(row):
         A string with the hash for the row.
 
     """
-    row_str = "".join(row.astype(str).values).encode()
-    return hashlib.md5(row_str).hexdigest()
+    # ensure stable order
+    values = []
+
+    for col in columns:
+        v = row[col]
+
+        if (isinstance(v, list) or not pd.isna(v)) and v==v and (v not in [None, np.nan]):
+            values.append(str(v))
+
+    row_str = "".join(values)
+    return hashlib.md5(row_str.encode()).hexdigest()
 
 
 def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=False):
@@ -298,7 +319,11 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
         # PK needs to be unique, so we drop the duplicated values
         df = df.drop_duplicates(subset=pk)
 
-    df["hash"] = df.apply(get_row_hash, axis=1)
+    # get a sorted list of columns to build the hash
+    columns = list(df.columns)
+    columns.sort()
+
+    df["hash"] = df.apply(lambda row: get_row_hash(row, columns), axis=1)
     # If there is a snapshot file compare and filter the hash
     hash_df = None
     if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.parquet"):

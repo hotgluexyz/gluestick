@@ -12,7 +12,7 @@ from gluestick.reader import Reader
 from singer import Transformer
 
 
-def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False):
+def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
     """Generate singer headers based on pandas types.
 
     Parameters
@@ -39,12 +39,13 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
             "format": "date-time",
             "type": ["string", "null"],
         },
+        "array": {"type": ["array", "null"], "items": {"type": ["object", "string", "null"]}},
     }
 
     if schema and not catalog_schema:
         header_map = schema
         return df, header_map
-    
+
     for col in df.columns:
         dtype = df[col].dtype.__str__().lower()
 
@@ -64,22 +65,25 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
                 first_value = value.iloc[0]
 
             if isinstance(first_value, list):
-                new_input = {}
-                for row in value:
-                    if len(row):
-                        for arr_value in row:
-                            if isinstance(arr_value, dict):
-                                temp_dict = {k:v for k, v in arr_value.items() if (k not in new_input.keys()) or isinstance(v, float)}
-                                new_input.update(temp_dict)
-                            else:
-                                new_input = arr_value        
-                _schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
-                header_map["properties"][col] = _schema
-                if not new_input:
-                    header_map["properties"][col] = {
-                            "items": type_mapping["str"],
-                            "type": ["array", "null"],
-                        } 
+                if recursive_typing:
+                    new_input = {}
+                    for row in value:
+                        if len(row):
+                            for arr_value in row:
+                                if isinstance(arr_value, dict):
+                                    temp_dict = {k:v for k, v in arr_value.items() if (k not in new_input.keys()) or isinstance(v, float)}
+                                    new_input.update(temp_dict)
+                                else:
+                                    new_input = arr_value
+                    _schema = dict(type=["array", "null"], items=to_singer_schema(new_input))
+                    header_map["properties"][col] = _schema
+                    if not new_input:
+                        header_map["properties"][col] = {
+                                "items": type_mapping["str"],
+                                "type": ["array", "null"],
+                            }
+                else:
+                    header_map["properties"][col] = type_mapping["array"]
             elif isinstance(first_value, dict):
                 _schema = dict(type=["object", "null"], properties={})
                 for k, v in first_value.items():
@@ -98,7 +102,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
                 return x
 
             df[col] = df[col].apply(check_null)
-    
+
     # update schema using types from catalog and keeping extra columns not defined in catalog
     # i.e. tenant, sync_date, etc
     if catalog_schema:
@@ -215,10 +219,10 @@ def deep_convert_datetimes(value):
         return [deep_convert_datetimes(child) for child in value]
     elif isinstance(value, dict):
         return {k: deep_convert_datetimes(v) for k, v in value.items()}
-    elif isinstance(value, datetime.date):
-        return value.strftime("%Y-%m-%d")
     elif isinstance(value, datetime.datetime):
         return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    elif isinstance(value, datetime.date):
+        return value.strftime("%Y-%m-%d")
     return value
 
 def parse_objs(x):
@@ -306,6 +310,9 @@ def to_singer(
     allow_objects=False,
     schema=None,
     unified_model=None,
+    keep_null_fields=True,
+    catalog_stream=None,
+    recursive_typing=True
 ):
     """Convert a pandas DataFrame into a singer file.
 
@@ -323,26 +330,35 @@ def to_singer(
         The output file name.
     allow_objects: boolean
         Allow or not objects to the parsed, if false defaults types to str.
-
+    keep_null_fields: boolean
+        Flag to keep all null fields
+    catalog_stream: str
+        Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
+        If this is not set it will use stream parameter to generate the catalog
+    recursive_typing: boolean
+        If true, the function will recursively convert arrays of objects to arrays of primitives.
+        If false, the function will fuzzy list types when generating singer header.
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
 
-    if allow_objects and not (catalog_schema or include_all_unified_fields):
+    # drop columns with all null values except when we want to keep null fields
+    if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
         df = df.dropna(how="all", axis=1)
 
-    if catalog_schema:
+    if catalog_schema or catalog_stream:
         # it'll allow_objects but keeping all columns
         allow_objects = True
         # get schema from catalog
-        schema = get_catalog_schema(stream)
+        stream_name = catalog_stream or stream
+        schema = get_catalog_schema(stream_name)
         # parse all fields that are typed as objects or lists
         df = parse_df_cols(df, schema)
 
     elif unified_model:
         schema = unwrap_json_schema(unified_model.model_json_schema())
 
-    df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema)
+    df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema, recursive_typing=recursive_typing)
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
 
@@ -351,8 +367,8 @@ def to_singer(
             singer.write_schema(stream, header_map, keys)
             with Transformer() as transformer:
                 for _, row in df.iterrows():
-                    # keep null fields for catalog_schema and include_all_unified_fields
-                    if not (catalog_schema or include_all_unified_fields):
+                    # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
+                    if not (catalog_schema or include_all_unified_fields or keep_null_fields):
                         filtered_row = row.dropna()
                     else:
                         filtered_row = row.where(pd.notna(row), None)
