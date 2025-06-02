@@ -44,7 +44,7 @@ class Reader:
             catalog = self.read_catalog()
             if catalog and catalog_types:
                 try:
-                    headers = pq.read_table(filepath).to_pandas(safe=False).columns.tolist()
+                    headers = pq.read_table(filepath, use_threads=False).to_pandas(safe=False, use_threads=False).columns.tolist()
                     types_params = self.get_types_from_catalog(catalog, stream, headers=headers)
                     dtype_dict = types_params.get('dtype')
                     parse_dates = types_params.get('parse_dates')
@@ -67,7 +67,7 @@ class Reader:
                         fields = [(col, type_mapping[str(dtype).lower()]) for col, dtype in dtype_dict.items()]
                         fields.extend([(col, pa.timestamp('ns')) for col in parse_dates])
                         schema = pa.schema(fields)
-                        df = pq.read_table(filepath, schema=schema).to_pandas(safe=False)
+                        df = pq.read_table(filepath, schema=schema, use_threads=False).to_pandas(safe=False, use_threads=False)
                         for col, dtype in dtype_dict.items():
                             # NOTE: bools require explicit conversion at the end because if there are empty values (NaN)
                             # pyarrow/pd defaults to convert to string
@@ -83,7 +83,7 @@ class Reader:
                     print(f"Failed to parse catalog_types for {stream}. Ignoring.")
                     pass
 
-            return pq.read_table(filepath).to_pandas(safe=False)
+            return pq.read_table(filepath, use_threads=False).to_pandas(safe=False, use_threads=False)
         catalog = self.read_catalog()
         if catalog and catalog_types:
             types_params = self.get_types_from_catalog(catalog, stream)
