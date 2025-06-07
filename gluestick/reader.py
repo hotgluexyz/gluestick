@@ -1,9 +1,12 @@
-import os
 import json
+import os
+
 import pandas as pd
-from pandas.io.parsers import TextFileReader
 import pyarrow as pa
+import pyarrow.dataset as ds
 import pyarrow.parquet as pq
+from pandas.io.parsers import TextFileReader
+
 
 class Reader:
     """A reader for gluestick ETL files."""
@@ -35,6 +38,87 @@ class Reader:
     def __repr__(self):
         return str(list(self.input_files.keys()))
 
+    def get_chunks(
+        self, stream, default=None, catalog_types=False, chunk_size=1, **kwargs
+    ):
+        """Read the selected file."""
+        filepath = self.input_files.get(stream)
+        if not filepath:
+            return default
+        if filepath.endswith(".parquet"):
+            catalog = self.read_catalog()
+
+            if catalog and catalog_types:
+                try:
+                    parquet_dataset = ds.dataset(filepath)
+                    headers = parquet_dataset.schema.names
+                    types_params = self.get_types_from_catalog(
+                        catalog, stream, headers=headers
+                    )
+                    dtype_dict = types_params.get("dtype")
+                    parse_dates = types_params.get("parse_dates")
+
+                    # Mapping pandas dtypes to pyarrow types
+                    type_mapping = {
+                        "int64": pa.int64(),
+                        "float64": pa.float64(),
+                        "<class 'float'>": pa.float64(),
+                        "string": pa.string(),
+                        "object": pa.string(),
+                        "datetime64[ns]": pa.timestamp("ns"),
+                        "bool": pa.bool_(),
+                        "boolean": pa.bool_(),
+                        # TODO: Add more mappings as needed
+                    }
+
+                    if dtype_dict:
+                        # Convert dtype dictionary to pyarrow schema
+                        fields = [
+                            (col, type_mapping[str(dtype).lower()])
+                            for col, dtype in dtype_dict.items()
+                        ]
+                        fields.extend(
+                            [(col, pa.timestamp("ns")) for col in parse_dates]
+                        )
+                        schema = pa.schema(fields)
+                        pq_dataset = ds.dataset(filepath, schema=schema)
+                        for record_batch in pq_dataset.to_batches(
+                            batch_size=chunk_size
+                        ):
+                            df = record_batch.to_pandas(safe=False)
+                            for col, dtype in dtype_dict.items():
+                                # NOTE: bools require explicit conversion at the end because if there are empty values (NaN)
+                                # pyarrow/pd defaults to convert to string
+                                if str(dtype).lower() in ["bool", "boolean"]:
+                                    df[col] = df[col].astype("boolean")
+                                elif str(dtype).lower() in ["int64"]:
+                                    df[col] = df[col].astype("Int64")
+                                elif str(dtype).lower() in ["object", "string"]:
+                                    df[col] = df[col].astype("string")
+                            yield df
+                except:
+                    # NOTE: silencing errors to avoid breaking existing workflow
+                    print(f"Failed to parse catalog_types for {stream}. Ignoring.")
+                    pass
+
+            pq_dataset = ds.dataset(filepath)
+            for record_batch in pq_dataset.to_batches(batch_size=chunk_size):
+                df = record_batch.to_pandas(safe=False)
+                yield df
+            return
+
+        # CSV
+        catalog = self.read_catalog()
+        if catalog and catalog_types:
+            types_params = self.get_types_from_catalog(catalog, stream)
+            kwargs.update(types_params)
+
+        df_gen = pd.read_csv(filepath, chunksize=chunk_size, **kwargs)
+        for df in df_gen:
+            for date_col in kwargs.get("parse_dates", []):
+                df[date_col] = pd.to_datetime(df[date_col], errors="coerce", utc=True)
+            yield df
+
     def get(self, stream, default=None, catalog_types=False, **kwargs):
         """Read the selected file."""
         filepath = self.input_files.get(stream)
@@ -44,37 +128,48 @@ class Reader:
             catalog = self.read_catalog()
             if catalog and catalog_types:
                 try:
-                    headers = pq.read_table(filepath).to_pandas(safe=False).columns.tolist()
-                    types_params = self.get_types_from_catalog(catalog, stream, headers=headers)
-                    dtype_dict = types_params.get('dtype')
-                    parse_dates = types_params.get('parse_dates')
+                    headers = (
+                        pq.read_table(filepath).to_pandas(safe=False).columns.tolist()
+                    )
+                    types_params = self.get_types_from_catalog(
+                        catalog, stream, headers=headers
+                    )
+                    dtype_dict = types_params.get("dtype")
+                    parse_dates = types_params.get("parse_dates")
 
                     # Mapping pandas dtypes to pyarrow types
                     type_mapping = {
-                        'int64': pa.int64(),
-                        'float64': pa.float64(),
+                        "int64": pa.int64(),
+                        "float64": pa.float64(),
                         "<class 'float'>": pa.float64(),
-                        'string': pa.string(),
-                        'object': pa.string(),
-                        'datetime64[ns]': pa.timestamp('ns'),
-                        'bool': pa.bool_(),
-                        'boolean': pa.bool_(),
+                        "string": pa.string(),
+                        "object": pa.string(),
+                        "datetime64[ns]": pa.timestamp("ns"),
+                        "bool": pa.bool_(),
+                        "boolean": pa.bool_(),
                         # TODO: Add more mappings as needed
                     }
 
                     if dtype_dict:
                         # Convert dtype dictionary to pyarrow schema
-                        fields = [(col, type_mapping[str(dtype).lower()]) for col, dtype in dtype_dict.items()]
-                        fields.extend([(col, pa.timestamp('ns')) for col in parse_dates])
+                        fields = [
+                            (col, type_mapping[str(dtype).lower()])
+                            for col, dtype in dtype_dict.items()
+                        ]
+                        fields.extend(
+                            [(col, pa.timestamp("ns")) for col in parse_dates]
+                        )
                         schema = pa.schema(fields)
-                        df = pq.read_table(filepath, schema=schema).to_pandas(safe=False)
+                        df = pq.read_table(filepath, schema=schema).to_pandas(
+                            safe=False
+                        )
                         for col, dtype in dtype_dict.items():
                             # NOTE: bools require explicit conversion at the end because if there are empty values (NaN)
                             # pyarrow/pd defaults to convert to string
                             if str(dtype).lower() in ["bool", "boolean"]:
-                                df[col] = df[col].astype('boolean')
+                                df[col] = df[col].astype("boolean")
                             elif str(dtype).lower() in ["int64"]:
-                                df[col] = df[col].astype('Int64')
+                                df[col] = df[col].astype("Int64")
                             elif str(dtype).lower() in ["object", "string"]:
                                 df[col] = df[col].astype("string")
                         return df
@@ -97,7 +192,7 @@ class Reader:
         # if a date field value is empty read_csv will read it as "object"
         # make sure all date fields are typed as date
         for date_col in kwargs.get("parse_dates", []):
-            df[date_col] = pd.to_datetime(df[date_col], errors='coerce', utc=True)
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce", utc=True)
 
         return df
 
@@ -194,6 +289,8 @@ class Reader:
             The singer catalog used on the tap.
         stream: str
             The name of the stream.
+        headers: list
+            The headers of the stream.
 
         Returns
         -------
@@ -205,7 +302,14 @@ class Reader:
         if headers is None:
             headers = pd.read_csv(filepath, nrows=0).columns.tolist()
 
-        streams = next((c for c in catalog["streams"] if c["stream"] == stream or c["tap_stream_id"] == stream), None)
+        streams = next(
+            (
+                c
+                for c in catalog["streams"]
+                if c["stream"] == stream or c["tap_stream_id"] == stream
+            ),
+            None,
+        )
         if not streams:
             return dict()
         types = streams["schema"]["properties"]
@@ -220,8 +324,12 @@ class Reader:
                 # if col has multiple types, use type with format if it not exists assign type object to support multiple types
                 any_of_list = col_type.get("anyOf", [])
                 if any_of_list:
-                    type_with_format = next((col_t for col_t in any_of_list if "format" in col_t), None)
-                    col_type = type_with_format if type_with_format else {"type": "object"}
+                    type_with_format = next(
+                        (col_t for col_t in any_of_list if "format" in col_t), None
+                    )
+                    col_type = (
+                        type_with_format if type_with_format else {"type": "object"}
+                    )
                 if col_type.get("format") == "date-time":
                     parse_dates.append(col)
                     continue
