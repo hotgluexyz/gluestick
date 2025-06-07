@@ -3,8 +3,8 @@ import os
 
 import pandas as pd
 import pyarrow as pa
-import pyarrow.parquet as pq
 import pyarrow.dataset as ds
+import pyarrow.parquet as pq
 from pandas.io.parsers import TextFileReader
 
 
@@ -37,15 +37,17 @@ class Reader:
 
     def __repr__(self):
         return str(list(self.input_files.keys()))
-    
-    def get_chunks(self, stream, default=None, catalog_types=False, chunk_size=1, **kwargs):
+
+    def get_chunks(
+        self, stream, default=None, catalog_types=False, chunk_size=1, **kwargs
+    ):
         """Read the selected file."""
         filepath = self.input_files.get(stream)
         if not filepath:
             return default
         if filepath.endswith(".parquet"):
             catalog = self.read_catalog()
-            
+
             if catalog and catalog_types:
                 try:
                     parquet_dataset = ds.dataset(filepath)
@@ -80,7 +82,9 @@ class Reader:
                         )
                         schema = pa.schema(fields)
                         pq_dataset = ds.dataset(filepath, schema=schema)
-                        for record_batch in pq_dataset.to_batches(batch_size=chunk_size):
+                        for record_batch in pq_dataset.to_batches(
+                            batch_size=chunk_size
+                        ):
                             df = record_batch.to_pandas(safe=False)
                             for col, dtype in dtype_dict.items():
                                 # NOTE: bools require explicit conversion at the end because if there are empty values (NaN)
@@ -102,7 +106,7 @@ class Reader:
                 df = record_batch.to_pandas(safe=False)
                 yield df
             return
-            
+
         # CSV
         catalog = self.read_catalog()
         if catalog and catalog_types:

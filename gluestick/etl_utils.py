@@ -5,10 +5,11 @@ import json
 import os
 import re
 from datetime import datetime
-import pyarrow.parquet as pq
-import pyarrow as pa
+
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from gluestick.reader import Reader
 from gluestick.singer import to_singer
 from pytz import utc  # type: ignore
@@ -612,7 +613,6 @@ def format_str_safely(str_to_format, **format_variables):
     return str_output
 
 
-
 def to_export_chunks(
     data_gen,
     name,
@@ -704,7 +704,10 @@ def to_export_chunks(
                 df = df.applymap(lambda x: str(x) if isinstance(x, (list, dict)) else x)
             if not parquet_writer:
                 arrow_schema = pyarrow_schema or pa.Schema.from_pandas(df)
-                parquet_writer = pq.ParquetWriter(os.path.join(output_dir, f"{composed_name}.parquet"), schema=arrow_schema)
+                parquet_writer = pq.ParquetWriter(
+                    os.path.join(output_dir, f"{composed_name}.parquet"),
+                    schema=arrow_schema,
+                )
             parquet_writer.write_table(pa.Table.from_pandas(df))
         parquet_writer.close()
     elif export_format == "json":
@@ -717,10 +720,15 @@ def to_export_chunks(
             for record in df.to_dict(orient="records"):
                 with open(f"{output_dir}/{composed_name}.jsonl", "a") as f:
                     f.write(json.dumps(record, default=str) + "\n")
-    else: # CSV
+    else:  # CSV
         written_headers = False
         for df in data_gen:
-            df.to_csv(f"{output_dir}/{composed_name}.csv", index=False, header=(not written_headers), mode="a")
+            df.to_csv(
+                f"{output_dir}/{composed_name}.csv",
+                index=False,
+                header=(not written_headers),
+                mode="a",
+            )
             written_headers = True
 
 
