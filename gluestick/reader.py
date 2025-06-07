@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pyarrow.dataset as ds
 from pandas.io.parsers import TextFileReader
 
 
@@ -36,6 +37,83 @@ class Reader:
 
     def __repr__(self):
         return str(list(self.input_files.keys()))
+    
+    def get_chunks(self, stream, default=None, catalog_types=False, chunk_size=1, **kwargs):
+        """Read the selected file."""
+        filepath = self.input_files.get(stream)
+        if not filepath:
+            return default
+        if filepath.endswith(".parquet"):
+            catalog = self.read_catalog()
+            
+            if catalog and catalog_types:
+                try:
+                    parquet_dataset = ds.dataset(filepath)
+                    headers = parquet_dataset.schema.names
+                    types_params = self.get_types_from_catalog(
+                        catalog, stream, headers=headers
+                    )
+                    dtype_dict = types_params.get("dtype")
+                    parse_dates = types_params.get("parse_dates")
+
+                    # Mapping pandas dtypes to pyarrow types
+                    type_mapping = {
+                        "int64": pa.int64(),
+                        "float64": pa.float64(),
+                        "<class 'float'>": pa.float64(),
+                        "string": pa.string(),
+                        "object": pa.string(),
+                        "datetime64[ns]": pa.timestamp("ns"),
+                        "bool": pa.bool_(),
+                        "boolean": pa.bool_(),
+                        # TODO: Add more mappings as needed
+                    }
+
+                    if dtype_dict:
+                        # Convert dtype dictionary to pyarrow schema
+                        fields = [
+                            (col, type_mapping[str(dtype).lower()])
+                            for col, dtype in dtype_dict.items()
+                        ]
+                        fields.extend(
+                            [(col, pa.timestamp("ns")) for col in parse_dates]
+                        )
+                        schema = pa.schema(fields)
+                        pq_dataset = ds.dataset(filepath, schema=schema)
+                        for record_batch in pq_dataset.to_batches(batch_size=chunk_size):
+                            df = record_batch.to_pandas(safe=False)
+                            for col, dtype in dtype_dict.items():
+                                # NOTE: bools require explicit conversion at the end because if there are empty values (NaN)
+                                # pyarrow/pd defaults to convert to string
+                                if str(dtype).lower() in ["bool", "boolean"]:
+                                    df[col] = df[col].astype("boolean")
+                                elif str(dtype).lower() in ["int64"]:
+                                    df[col] = df[col].astype("Int64")
+                                elif str(dtype).lower() in ["object", "string"]:
+                                    df[col] = df[col].astype("string")
+                            yield df
+                except:
+                    # NOTE: silencing errors to avoid breaking existing workflow
+                    print(f"Failed to parse catalog_types for {stream}. Ignoring.")
+                    pass
+
+            pq_dataset = ds.dataset(filepath)
+            for record_batch in pq_dataset.to_batches(batch_size=chunk_size):
+                df = record_batch.to_pandas(safe=False)
+                yield df
+            return
+            
+        # CSV
+        catalog = self.read_catalog()
+        if catalog and catalog_types:
+            types_params = self.get_types_from_catalog(catalog, stream)
+            kwargs.update(types_params)
+
+        df_gen = pd.read_csv(filepath, chunksize=chunk_size, **kwargs)
+        for df in df_gen:
+            for date_col in kwargs.get("parse_dates", []):
+                df[date_col] = pd.to_datetime(df[date_col], errors="coerce", utc=True)
+            yield df
 
     def get(self, stream, default=None, catalog_types=False, **kwargs):
         """Read the selected file."""

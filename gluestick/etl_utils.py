@@ -5,7 +5,8 @@ import json
 import os
 import re
 from datetime import datetime
-
+import pyarrow.parquet as pq
+import pyarrow as pa
 import numpy as np
 import pandas as pd
 from gluestick.reader import Reader
@@ -609,6 +610,118 @@ def format_str_safely(str_to_format, **format_variables):
         str_output = re.sub(re.compile("{" + k + "}"), v, str_output)
 
     return str_output
+
+
+
+def to_export_chunks(
+    data_gen,
+    name,
+    output_dir,
+    keys=[],
+    unified_model=None,
+    export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"),
+    output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"),
+    schema=None,
+    pyarrow_schema=None,
+    stringify_objects=False,
+    reserved_variables={},
+):
+    """Parse a stringified dict or list of dicts.
+
+    Notes
+    -----
+    This function will export the input data to a specified format
+
+    Parameters
+    ----------
+    data_gen: generator
+        generator of dataframes that will be transformed to a specified format.
+    name: str
+        name of the output file
+    output_dir: str
+        path of the folder that will store the output file
+    keys: list
+        List of keys to be used to export the data
+    output_file_prefix: str
+        prefix of the output file name if needed
+    pyarrow_schema: pyarrow.Schema
+        pyarrow schema to be used for parquet files
+    export_format: str
+        format to which the dataframe will be transformed
+        supported values are: singer, parquet, json and csv
+    unified_model: pydantic model
+        pydantic model used to generate the schema for export format
+        'singer'
+    schema: dict
+        customized schema used for export format 'singer'
+    stringify_objects: bool
+        for parquet files it will stringify complex structures as arrays
+        of objects
+    reserved_variables: dict
+        A dictionary of default values for the format variables to be used
+        in the output_file_prefix.
+
+    Returns
+    -------
+    return: file
+        it outputs a singer, parquet, json or csv file
+
+    """
+    # NOTE: This is meant to allow users to override the default output name for a specific stream
+    if os.environ.get(f"HG_UNIFIED_OUTPUT_{name.upper()}"):
+        name = os.environ[f"HG_UNIFIED_OUTPUT_{name.upper()}"]
+
+    if output_file_prefix:
+        # format output_file_prefix with env variables
+        format_variables = build_string_format_variables(
+            default_kwargs=reserved_variables
+        )
+        output_file_prefix = format_str_safely(output_file_prefix, **format_variables)
+        composed_name = f"{output_file_prefix}{name}"
+    else:
+        composed_name = name
+
+    if export_format == "singer":
+        # get pk
+        reader = Reader()
+        keys = keys or reader.get_pk(name)
+        # export data as singer
+        for df in data_gen:
+            to_singer(
+                df,
+                composed_name,
+                output_dir,
+                keys=keys,
+                allow_objects=True,
+                unified_model=unified_model,
+                schema=schema,
+            )
+    elif export_format == "parquet":
+
+        parquet_writer = None
+        for df in data_gen:
+            if stringify_objects:
+                df = df.applymap(lambda x: str(x) if isinstance(x, (list, dict)) else x)
+            if not parquet_writer:
+                arrow_schema = pyarrow_schema or pa.Schema.from_pandas(df)
+                parquet_writer = pq.ParquetWriter(os.path.join(output_dir, f"{composed_name}.parquet"), schema=arrow_schema)
+            parquet_writer.write_table(pa.Table.from_pandas(df))
+        parquet_writer.close()
+    elif export_format == "json":
+        for df in data_gen:
+            for record in df.to_dict(orient="records"):
+                with open(f"{output_dir}/{composed_name}.json", "a") as f:
+                    f.write(json.dumps(record, default=str) + "\n")
+    elif export_format == "jsonl":
+        for df in data_gen:
+            for record in df.to_dict(orient="records"):
+                with open(f"{output_dir}/{composed_name}.jsonl", "a") as f:
+                    f.write(json.dumps(record, default=str) + "\n")
+    else: # CSV
+        written_headers = False
+        for df in data_gen:
+            df.to_csv(f"{output_dir}/{composed_name}.csv", index=False, header=(not written_headers), mode="a")
+            written_headers = True
 
 
 def to_export(
