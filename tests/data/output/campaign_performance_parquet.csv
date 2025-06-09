@@ -1,0 +1,9 @@
+customer_id,campaign__resourceName,campaign__status,campaign__name,metrics__clicks,metrics__costMicros,metrics__ctr,metrics__averageCpc,metrics__impressions,segments__device,segments__date
+7950307320,customers/7950307320/campaigns/12768130709,ENABLED,SuitShop-Google-OBcvr-OPpur-Search-Brand-RT-Hot,64,90217477,0.374269,1409648.1,171,DESKTOP,2025-03-25
+7950307320,customers/7950307320/campaigns/12768130709,ENABLED,SuitShop-Google-OBcvr-OPpur-Search-Brand-RT-Hot,117,175920000,0.38870433,1503589.8,301,MOBILE,2025-03-25
+7950307320,customers/7950307320/campaigns/12768130709,ENABLED,SuitShop-Google-OBcvr-OPpur-Search-Brand-RT-Hot,1,10000,0.33333334,10000.0,3,TABLET,2025-03-25
+7950307320,customers/7950307320/campaigns/12768130709,ENABLED,SuitShop-Google-OBcvr-OPpur-Search-Brand-RT-Hot,56,79952060,0.3478261,1427715.4,161,DESKTOP,2025-03-26
+7950307320,customers/7950307320/campaigns/12768130709,ENABLED,SuitShop-Google-OBcvr-OPpur-Search-Brand-RT-Hot,100,193100494,0.33670035,1931005.0,297,MOBILE,2025-03-26
+7950307320,customers/7950307320/campaigns/12768130709,ENABLED,SuitShop-Google-OBcvr-OPpur-Search-Brand-RT-Hot,58,76730551,0.34117648,1322940.5,170,DESKTOP,2025-03-27
+7950307320,customers/7950307320/campaigns/12768130709,ENABLED,SuitShop-Google-OBcvr-OPpur-Search-Brand-RT-Hot,102,185445105,0.3,1818089.2,340,MOBILE,2025-03-27
+7950307320,customers/7950307320/campaigns/12768130709,ENABLED,SuitShop-Google-OBcvr-OPpur-Search-Brand-RT-Hot,1,830000,0.5,830000.0,2,TABLET,2025-03-27

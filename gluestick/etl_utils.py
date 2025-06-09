@@ -3,14 +3,16 @@
 import hashlib
 import json
 import os
-
-import pandas as pd
-import numpy as np
-from datetime import datetime
-from pytz import utc
-from gluestick.singer import to_singer
 import re
+from datetime import datetime
+
+import numpy as np
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from gluestick.reader import Reader
+from gluestick.singer import to_singer
+from pytz import utc  # type: ignore
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -160,7 +162,11 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
     """
     # Read snapshot file if it exists
     if os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.parquet"):
-        snapshot = pd.read_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", use_nullable_dtypes=True, **kwargs)
+        snapshot = pd.read_parquet(
+            f"{snapshot_dir}/{stream}.snapshot.parquet",
+            use_nullable_dtypes=True,
+            **kwargs,
+        )
     elif os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.csv"):
         snapshot = pd.read_csv(f"{snapshot_dir}/{stream}.snapshot.csv", **kwargs)
     else:
@@ -169,7 +175,15 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 
 def snapshot_records(
-    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, **kwargs
+    stream_data,
+    stream,
+    snapshot_dir,
+    pk="id",
+    just_new=False,
+    use_csv=False,
+    coerce_types=False,
+    localize_datetime_types=False,
+    **kwargs,
 ):
     """Update a snapshot file.
 
@@ -183,8 +197,10 @@ def snapshot_records(
         The name of the stream of the snapshots.
     pk: str
         The primary key used for the snapshot.
-    just_new: str
+    just_new: bool
         Return just the input data if True, else returns the whole data
+    use_csv: bool
+        To use csv or parquet when snapshotting the hash.
     coerce_types: bool
         Coerces types to the stream_data types if True, else mantains current snapshot types
     localize_datetime_types: bool
@@ -219,23 +235,27 @@ def snapshot_records(
                 df_types = stream_data.dtypes
                 try:
                     for column, dtype in df_types.items():
-                        if dtype == 'bool':
-                            merged_data[column] = merged_data[column].astype('boolean')
+                        if dtype == "bool":
+                            merged_data[column] = merged_data[column].astype("boolean")
                         elif dtype in ["int64", "int32", "Int32", "Int64"]:
                             merged_data[column] = merged_data[column].astype("Int64")
-                        elif dtype == 'object':
+                        elif dtype == "object":
                             merged_data[column] = merged_data[column].astype(str)
                         else:
                             merged_data[column] = merged_data[column].astype(dtype)
-                except Exception as e:
-                    raise Exception(f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}")
+                except Exception:
+                    raise Exception(
+                        f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}"
+                    )
         # drop duplicates
         merged_data = merged_data.drop_duplicates(pk, keep="last")
         # export data
         if use_csv:
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
-            merged_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
+            merged_data.to_parquet(
+                f"{snapshot_dir}/{stream}.snapshot.parquet", index=False
+            )
         if not just_new:
             return merged_data
 
@@ -244,7 +264,9 @@ def snapshot_records(
         if use_csv:
             stream_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
-            stream_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
+            stream_data.to_parquet(
+                f"{snapshot_dir}/{stream}.snapshot.parquet", index=False
+            )
         return stream_data
 
     # If the new data is empty return snapshot
@@ -261,6 +283,8 @@ def get_row_hash(row, columns):
     ----------
     row: pd.DataSeries
         DataFrame row to create the hash from.
+    columns: list
+        List of columns to create the hash from.
 
     Returns
     -------
@@ -274,7 +298,11 @@ def get_row_hash(row, columns):
     for col in columns:
         v = row[col]
 
-        if (isinstance(v, list) or not pd.isna(v)) and v==v and (v not in [None, np.nan]):
+        if (
+            (isinstance(v, list) or not pd.isna(v))
+            and v == v
+            and (v not in [None, np.nan])
+        ):
             values.append(str(v))
 
     row_str = "".join(values)
@@ -302,6 +330,8 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
     updated_flag: bool
         To create of not a column with a flag for new/updated rows for the given
         primary key.
+    use_csv: bool
+        To use csv or parquet when snapshotting the hash.
 
     Returns
     -------
@@ -350,13 +380,14 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
     df = df.drop("hash", axis=1)
     return df
 
+
 def clean_convert(input):
     """Cleans all None values from a list or dict.
 
     Notes
     -----
-    This function will iterate through all the values of a list or dict 
-    and delete all None values 
+    This function will iterate through all the values of a list or dict
+    and delete all None values
 
     Parameters
     ----------
@@ -385,6 +416,7 @@ def clean_convert(input):
     elif not pd.isna(input):
         return input
 
+
 def map_fields(row, mapping):
     """Maps the row values according to the mapping dict.
 
@@ -395,8 +427,10 @@ def map_fields(row, mapping):
 
     Parameters
     ----------
-    row: dict or dataframe row with the values to be mapped
-    mapping: dict that estabilsh how to map the fields
+    row: dict or pd.Dataframe row
+        Row with the values to be mapped
+    mapping: dict
+        Dictionary that estabilsh how to map the fields
 
     Returns
     -------
@@ -423,12 +457,13 @@ def map_fields(row, mapping):
                 output[key] = row.get(value)
     return output
 
+
 def clean_obj_null_values(obj):
     """Replaces all null values by None.
 
     Notes
     -----
-    This function will replace all null values by None so other functions 
+    This function will replace all null values by None so other functions
     such as explode_json_to_cols, explode_json_to_rows, etc can be used
 
     Parameters
@@ -443,7 +478,7 @@ def clean_obj_null_values(obj):
 
     """
     if not pd.isna(obj):
-        obj = obj.replace('null', 'None')
+        obj = obj.replace("null", "None")
         return obj
     else:
         return {}
@@ -502,9 +537,7 @@ def build_string_format_variables(
     # Build tenant metadata variable
     tenant_metadata = dict()
     if use_tenant_metadata:
-        tenant_metadata_path = (
-            f"{os.environ.get('ROOT')}/snapshots/tenant-config.json"
-        )
+        tenant_metadata_path = f"{os.environ.get('ROOT')}/snapshots/tenant-config.json"
         if os.path.exists(tenant_metadata_path):
             with open(tenant_metadata_path, "r") as file:
                 tenant_metadata = json.load(file)
@@ -580,6 +613,125 @@ def format_str_safely(str_to_format, **format_variables):
     return str_output
 
 
+def to_export_chunks(
+    data_gen,
+    name,
+    output_dir,
+    keys=[],
+    unified_model=None,
+    export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"),
+    output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"),
+    schema=None,
+    pyarrow_schema=None,
+    stringify_objects=False,
+    reserved_variables={},
+):
+    """Write a generator of dataframes to a specified format.
+
+    Notes
+    -----
+    This function will export the input data to a specified format
+
+    Parameters
+    ----------
+    data_gen: generator
+        generator of dataframes that will be transformed to a specified format.
+    name: str
+        name of the output file
+    output_dir: str
+        path of the folder that will store the output file
+    keys: list
+        List of keys to be used to export the data
+    output_file_prefix: str
+        prefix of the output file name if needed
+    pyarrow_schema: pyarrow.Schema
+        pyarrow schema to be used for parquet files
+    export_format: str
+        format to which the dataframe will be transformed
+        supported values are: singer, parquet, json and csv
+    unified_model: pydantic model
+        pydantic model used to generate the schema for export format
+        'singer'
+    schema: dict
+        customized schema used for export format 'singer'
+    stringify_objects: bool
+        for parquet files it will stringify complex structures as arrays
+        of objects
+    reserved_variables: dict
+        A dictionary of default values for the format variables to be used
+        in the output_file_prefix.
+
+    Returns
+    -------
+    return: file
+        it outputs a singer, parquet, json or csv file
+
+    """
+    # NOTE: This is meant to allow users to override the default output name for a specific stream
+    if os.environ.get(f"HG_UNIFIED_OUTPUT_{name.upper()}"):
+        name = os.environ[f"HG_UNIFIED_OUTPUT_{name.upper()}"]
+
+    if output_file_prefix:
+        # format output_file_prefix with env variables
+        format_variables = build_string_format_variables(
+            default_kwargs=reserved_variables
+        )
+        output_file_prefix = format_str_safely(output_file_prefix, **format_variables)
+        composed_name = f"{output_file_prefix}{name}"
+    else:
+        composed_name = name
+
+    if export_format == "singer":
+        # get pk
+        reader = Reader()
+        keys = keys or reader.get_pk(name)
+        # export data as singer
+        for df in data_gen:
+            to_singer(
+                df,
+                composed_name,
+                output_dir,
+                keys=keys,
+                allow_objects=True,
+                unified_model=unified_model,
+                schema=schema,
+            )
+    elif export_format == "parquet":
+
+        parquet_writer = None
+        for df in data_gen:
+            if stringify_objects:
+                df = df.applymap(lambda x: str(x) if isinstance(x, (list, dict)) else x)
+            if not parquet_writer:
+                arrow_schema = pyarrow_schema or pa.Schema.from_pandas(df)
+                parquet_writer = pq.ParquetWriter(
+                    os.path.join(output_dir, f"{composed_name}.parquet"),
+                    schema=arrow_schema,
+                )
+            parquet_writer.write_table(pa.Table.from_pandas(df))
+        parquet_writer.close()
+    elif export_format == "json":
+        for df in data_gen:
+            for record in df.to_dict(orient="records"):
+                with open(f"{output_dir}/{composed_name}.json", "a") as f:
+                    f.write(json.dumps(record, default=str) + "\n")
+    elif export_format == "jsonl":
+        for df in data_gen:
+            for record in df.to_dict(orient="records"):
+                with open(f"{output_dir}/{composed_name}.jsonl", "a") as f:
+                    f.write(json.dumps(record, default=str) + "\n")
+    else:  # CSV
+        written_headers = False
+        for df in data_gen:
+            df.to_csv(
+                f"{output_dir}/{composed_name}.csv",
+                index=False,
+                header=(not written_headers),
+                mode="a",
+            )
+            written_headers = True
+
+
 def to_export(
     data,
     name,
@@ -606,6 +758,8 @@ def to_export(
         name of the output file
     output_dir: str
         path of the folder that will store the output file
+    keys: list
+        List of keys to be used to export the data
     output_file_prefix: str
         prefix of the output file name if needed
     export_format: str
@@ -648,7 +802,15 @@ def to_export(
         reader = Reader()
         keys = keys or reader.get_pk(name)
         # export data as singer
-        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+        to_singer(
+            data,
+            composed_name,
+            output_dir,
+            keys=keys,
+            allow_objects=True,
+            unified_model=unified_model,
+            schema=schema,
+        )
     elif export_format == "parquet":
         if stringify_objects:
             data.to_parquet(
@@ -658,18 +820,25 @@ def to_export(
         else:
             data.to_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
     elif export_format == "json":
-        data.to_json(f"{output_dir}/{composed_name}.json", orient="records", date_format='iso')
+        data.to_json(
+            f"{output_dir}/{composed_name}.json", orient="records", date_format="iso"
+        )
     elif export_format == "jsonl":
-        data.to_json(f"{output_dir}/{composed_name}.jsonl", orient='records', lines=True, date_format='iso')
+        data.to_json(
+            f"{output_dir}/{composed_name}.jsonl",
+            orient="records",
+            lines=True,
+            date_format="iso",
+        )
     else:
         data.to_csv(f"{output_dir}/{composed_name}.csv", index=False)
 
 
 def localize_datetime(df, column_name):
-    """
-    Localize a Pandas DataFrame column to a specific timezone.
-    Parameters:
-    -----------
+    """Localize a Pandas DataFrame column to a specific timezone.
+
+    Parameters
+    ----------
     df : pandas.DataFrame
         The DataFrame to be modified.
     column_name : str
@@ -681,18 +850,21 @@ def localize_datetime(df, column_name):
     try:
         df[column_name] = df[column_name].dt.tz_localize(utc)
     except:
-        df[column_name] = df[column_name].dt.tz_convert('UTC')
+        df[column_name] = df[column_name].dt.tz_convert("UTC")
 
     return df[column_name]
 
+
 def exception(exception, root_dir, error_message=None):
-    """
-    Stores an exception and a message into a file errors.txt, 
-    then the executor reads the error from the txt file to showcase the right error.
+    """Store an exception and a message into a file errors.txt.
+
+    The executor then reads the error from the txt file to showcase the right error.
     It should be used instead of raise Exception.
-    Parameters:
-    -----------
-    exception : the exception caught in a try except code.
+
+    Parameters
+    ----------
+    exception : Exception
+        The exception caught in a try except code.
     root_dir : str
         The path of the roo_dir to store errors.txt
     error_message: str
