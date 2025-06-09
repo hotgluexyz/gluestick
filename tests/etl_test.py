@@ -121,9 +121,9 @@ class TestETL(object):
         print("test_explode_multi output is correct")
 
 
-    def test_to_singer(self, tmp_path):
+    def test_to_export(self, tmp_path):
         print("=====")
-        print("test_to_singer")
+        print("test_to_export")
         dir_name = os.path.dirname(__file__)
         input = gs.Reader(dir=os.path.join(dir_name, "data/input"))
 
@@ -232,9 +232,9 @@ class TestETL(object):
 
 
 
-    def test_to_singer_chunked(self, tmp_path):
+    def test_to_export_chunked(self, tmp_path):
         print("=====")
-        print("test_to_singer_chunked")
+        print("test_to_export_chunked")
         dir_name = os.path.dirname(__file__)
         input = gs.Reader(dir=os.path.join(dir_name, "data/input"))
 

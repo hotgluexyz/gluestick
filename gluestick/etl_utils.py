@@ -626,7 +626,7 @@ def to_export_chunks(
     stringify_objects=False,
     reserved_variables={},
 ):
-    """Parse a stringified dict or list of dicts.
+    """Write a generator of dataframes to a specified format.
 
     Notes
     -----
