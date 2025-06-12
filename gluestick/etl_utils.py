@@ -223,8 +223,6 @@ def snapshot_records(
                             merged_data[column] = merged_data[column].astype('boolean')
                         elif dtype in ["int64", "int32", "Int32", "Int64"]:
                             merged_data[column] = merged_data[column].astype("Int64")
-                        elif dtype == 'object':
-                            merged_data[column] = merged_data[column].astype(str)
                         else:
                             merged_data[column] = merged_data[column].astype(dtype)
                 except Exception as e:
