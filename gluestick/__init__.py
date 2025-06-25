@@ -3,4 +3,3 @@
 from .etl_utils import *  # noqa
 from .pandas_utils import *  # noqa
 from .singer import *  # noqa
-from .reader import *  # noqa

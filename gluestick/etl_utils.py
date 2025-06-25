@@ -5,13 +5,12 @@ import json
 import os
 
 import pandas as pd
-import numpy as np
+import pyarrow as pa
 import pyarrow.parquet as pq
 from datetime import datetime
 from pytz import utc
+import ast
 from gluestick.singer import to_singer
-import re
-from gluestick.reader import Reader
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -173,7 +172,7 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 
 def snapshot_records(
-    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, **kwargs
+    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, **kwargs
 ):
     """Update a snapshot file.
 
@@ -191,8 +190,6 @@ def snapshot_records(
         Return just the input data if True, else returns the whole data
     coerce_types: bool
         Coerces types to the stream_data types if True, else mantains current snapshot types
-    localize_datetime_types: bool
-        Localizes datetime columns to UTC if True, else mantains current snapshot types
     **kwargs:
         Additional arguments that are passed to pandas read_csv.
 
@@ -207,34 +204,24 @@ def snapshot_records(
 
     # If snapshot file and stream data exist update the snapshot
     if stream_data is not None and snapshot is not None:
-        snapshot_types = snapshot.dtypes
-
-        if localize_datetime_types:
-            # Localize datetime columns to UTC (datetime64[ns, UTC]) if they are not already
-            for column, dtype in snapshot_types.items():
-                if dtype == "datetime64[ns]":
-                    snapshot[column] = localize_datetime(snapshot, column)
-
         merged_data = pd.concat([snapshot, stream_data])
+        merged_data = merged_data.drop_duplicates(pk, keep="last")
         # coerce snapshot types to incoming data types
         if coerce_types:
             if not stream_data.empty and not snapshot.empty:
                 # Save incoming data types
                 df_types = stream_data.dtypes
+                snapshot_types = snapshot.dtypes
                 try:
                     for column, dtype in df_types.items():
                         if dtype == 'bool':
                             merged_data[column] = merged_data[column].astype('boolean')
                         elif dtype in ["int64", "int32", "Int32", "Int64"]:
                             merged_data[column] = merged_data[column].astype("Int64")
-                        elif dtype == 'object':
-                            merged_data[column] = merged_data[column].astype(str)
                         else:
                             merged_data[column] = merged_data[column].astype(dtype)
                 except Exception as e:
                     raise Exception(f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}")
-        # drop duplicates
-        merged_data = merged_data.drop_duplicates(pk, keep="last")
         # export data
         if use_csv:
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
@@ -258,7 +245,7 @@ def snapshot_records(
         return snapshot
 
 
-def get_row_hash(row, columns):
+def get_row_hash(row):
     """Update a snapshot file.
 
     Parameters
@@ -272,17 +259,8 @@ def get_row_hash(row, columns):
         A string with the hash for the row.
 
     """
-    # ensure stable order
-    values = []
-
-    for col in columns:
-        v = row[col]
-
-        if (isinstance(v, list) or not pd.isna(v)) and v==v and (v not in [None, np.nan]):
-            values.append(str(v))
-
-    row_str = "".join(values)
-    return hashlib.md5(row_str.encode()).hexdigest()
+    row_str = "".join(row.astype(str).values).encode()
+    return hashlib.md5(row_str).hexdigest()
 
 
 def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=False):
@@ -319,11 +297,7 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
         # PK needs to be unique, so we drop the duplicated values
         df = df.drop_duplicates(subset=pk)
 
-    # get a sorted list of columns to build the hash
-    columns = list(df.columns)
-    columns.sort()
-
-    df["hash"] = df.apply(lambda row: get_row_hash(row, columns), axis=1)
+    df["hash"] = df.apply(get_row_hash, axis=1)
     # If there is a snapshot file compare and filter the hash
     hash_df = None
     if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.parquet"):
@@ -452,137 +426,33 @@ def clean_obj_null_values(obj):
     else:
         return {}
 
-
-def get_index_safely(arr, index):
-    """Safely retrieves an item from an list by index.
-
-    Parameters
-    ----------
-    arr: list
-        List of items.
-    index: int
-        The index position of the item
-
-    Returns
-    -------
-    return: any
-        The item at the specified index, or `None` if the index is out of bounds.
-    """
-    try:
-        return arr[index]
-    except:
-        return None
-
-
-def build_string_format_variables(
-    default_kwargs=dict(), use_tenant_metadata=True, subtenant_delimiter="_"
-):
-    """Builds a dictionary of string format variables from multiple sources.
-
-    Parameters
-    ----------
-    default_kwargs : dict
-        A dictionary of default values for the format variables. Keys in this
-        dictionary are reserved and cannot be overridden by tenant metadata.
-    use_tenant_metadata : bool
-        Whether to include variables derived from tenant metadata. If True,
-        attempts to load metadata from the tenant configuration JSON file.
-    subtenant_delimiter : str
-        The delimiter used to split the `tenant_id` into root and sub-tenant
-        components.
-
-    Returns
-    -------
-    dict
-        A dictionary containing the consolidated string format variables.
-
-    """
-    # Reserved keys are keys that may not be overriden by other sources of variabes (e.g., tenant metadata)
-    # The keys in the "default_kwargs" are chosen to be these reserved keys
-    reserved_keys = list(default_kwargs.keys())
-
-    final_kwargs = default_kwargs.copy()
-
-    # Build tenant metadata variable
-    tenant_metadata = dict()
-    if use_tenant_metadata:
-        tenant_metadata_path = (
-            f"{os.environ.get('ROOT')}/snapshots/tenant-config.json"
-        )
-        if os.path.exists(tenant_metadata_path):
-            with open(tenant_metadata_path, "r") as file:
-                tenant_metadata = json.load(file)
-        tenant_metadata = tenant_metadata.get("hotglue_metadata") or dict()
-        tenant_metadata = tenant_metadata.get("metadata") or dict()
-
-    # Iterate over "tenant_metadata" items and only add them in the "final_kwargs" if
-    # the key is not in the "reserved_keys"
-    for k, v in tenant_metadata.items():
-        if k in reserved_keys:
-            continue
-
-        final_kwargs[k] = v
-
-    flow_id = os.environ.get("FLOW")
-    job_id = os.environ.get("JOB_ID")
-    tap = os.environ.get("TAP")
-    connector = os.environ.get("CONNECTOR_ID")
-    tenant_id = os.environ.get("TENANT", "")
-    env_id = os.environ.get("ENV_ID")
-
-    splitted_tenant_id = tenant_id.split(subtenant_delimiter)
-    root_tenant_id = splitted_tenant_id[0]
-    sub_tenant_id = get_index_safely(splitted_tenant_id, 1) or ""
-
-    final_kwargs.update(
-        {
-            "tenant": tenant_id,
-            "tenant_id": tenant_id,
-            "root_tenant_id": root_tenant_id,
-            "sub_tenant_id": sub_tenant_id,
-            "env_id": env_id,
-            "flow_id": flow_id,
-            "job_id": job_id,
-            "tap": tap,
-            "connector": connector,
-        }
-    )
-
-    return final_kwargs
-
-
-def format_str_safely(str_to_format, **format_variables):
-    """Safely formats a string by replacing placeholders with provided values.
+def parse_objs(x):
+    """Parse a stringified dict or list of dicts.
 
     Notes
     -----
-    - This function skips placeholders with missing or empty values in
-      `format_variables`.
+    This function will parse a stringified dict or list of dicts
 
     Parameters
     ----------
-    str_to_format : str
-        The string containing placeholders to be replaced. Placeholders
-        should be in the format `{key}`.
-    **format_variables : dict
-        Keyword arguments representing the variables to replace in the string.
+    x: str
+        stringified dict or list of dicts.
 
     Returns
     -------
-    str
-        A formatted string with the placeholders replaced by their
-        corresponding values.
+    return: dict, list
+        parsed dict or list of dicts.
 
     """
-    str_output = str_to_format
+    # if it's not a string, we just return the input
+    if type(x) != str:
+        return x
 
-    for k, v in format_variables.items():
-        if not v:
-            continue
-        str_output = re.sub(re.compile("{" + k + "}"), v, str_output)
-
-    return str_output
-
+    try:
+        return ast.literal_eval(x)
+    except:
+        return json.loads(x)
+    
 
 def to_export(
     data,
@@ -594,7 +464,6 @@ def to_export(
     output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"),
     schema=None,
     stringify_objects=False,
-    reserved_variables={},
 ):
     """Parse a stringified dict or list of dicts.
 
@@ -623,9 +492,6 @@ def to_export(
     stringify_objects: bool
         for parquet files it will stringify complex structures as arrays
         of objects
-    reserved_variables: dict
-        A dictionary of default values for the format variables to be used
-        in the output_file_prefix.
 
     Returns
     -------
@@ -638,21 +504,12 @@ def to_export(
         name = os.environ[f"HG_UNIFIED_OUTPUT_{name.upper()}"]
 
     if output_file_prefix:
-        # format output_file_prefix with env variables
-        format_variables = build_string_format_variables(
-            default_kwargs=reserved_variables
-        )
-        output_file_prefix = format_str_safely(output_file_prefix, **format_variables)
         composed_name = f"{output_file_prefix}{name}"
     else:
         composed_name = name
 
     if export_format == "singer":
-        # get pk
-        reader = Reader()
-        keys = keys or reader.get_pk(name)
-        # export data as singer
-        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+        to_singer(data, name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
     elif export_format == "parquet":
         if stringify_objects:
             data.to_parquet(
@@ -667,6 +524,170 @@ def to_export(
         data.to_json(f"{output_dir}/{composed_name}.jsonl", orient='records', lines=True, date_format='iso')
     else:
         data.to_csv(f"{output_dir}/{composed_name}.csv", index=False)
+
+
+class Reader:
+    """A reader for gluestick ETL files."""
+
+    ROOT_DIR = os.environ.get("ROOT_DIR", ".")
+    INPUT_DIR = f"{ROOT_DIR}/sync-output"
+
+    def __init__(self, dir=INPUT_DIR, root=ROOT_DIR):
+        """Init the class and read directories.
+
+        Parameters
+        ----------
+        dir: str
+            Directory with the input data.
+        root: str
+            Root directory.
+
+        """
+        self.root = root
+        self.dir = dir
+        self.input_files = self.read_directories()
+
+    def __dict__(self):
+        return self.input_files
+
+    def __str__(self):
+        return str(list(self.input_files.keys()))
+
+    def __repr__(self):
+        return str(list(self.input_files.keys()))
+
+    def get(self, stream, default=None, catalog_types=False, **kwargs):
+        """Read the selected file."""
+        filepath = self.input_files.get(stream)
+        if not filepath:
+            return default
+        if filepath.endswith(".parquet"):
+            import pyarrow.parquet as pq
+            return pq.read_table(filepath).to_pandas(safe=False)
+        catalog = self.read_catalog()
+        if catalog and catalog_types:
+            types_params = self.get_types_from_catalog(catalog, stream)
+            kwargs.update(types_params)
+        df = pd.read_csv(filepath, **kwargs)
+        # if a date field value is empty read_csv will read it as "object"
+        # make sure all date fields are typed as date
+        for date_col in kwargs.get("parse_dates", []):
+            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        return df
+
+    def get_metadata(self, stream):
+        """Get metadata from parquet file."""
+        file = self.input_files.get(stream)
+        if file is None:
+            raise FileNotFoundError(f"There is no file for stream with name {stream}.")
+        if file.endswith(".parquet"):
+            return {
+                k.decode(): v.decode()
+                for k, v in pq.read_metadata(file).metadata.items()
+            }
+        return {}
+
+    def get_pk(self, stream):
+        """Get pk from parquet file."""
+        metadata = self.get_metadata(stream)
+        if metadata.get("key_properties"):
+            return eval(metadata["key_properties"])
+        else:
+            return []
+
+    def read_directories(self, ignore=[]):
+        """Read all the available directories for input files.
+
+        Parameters
+        ----------
+        ignore: list
+            Stream names to ignore.
+
+        Returns
+        -------
+        return: dict
+            Dict with the name of the streams and their paths.
+
+        """
+        is_directory = os.path.isdir(self.dir)
+        all_files = []
+        results = {}
+        if is_directory:
+            for entry in os.listdir(self.dir):
+                file_path = os.path.join(self.dir, entry)
+                if os.path.isfile(file_path):
+                    if file_path.endswith(".csv") or file_path.endswith(".parquet"):
+                        all_files.append(file_path)
+        else:
+            all_files.append(self.dir)
+
+        for file in all_files:
+            split_path = file.split("/")
+            entity_type = split_path[len(split_path) - 1].rsplit(".", 1)[0]
+
+            if "-" in entity_type:
+                entity_type = entity_type.rsplit("-", 1)[0]
+
+            if entity_type not in results and entity_type not in ignore:
+                results[entity_type] = file
+
+        return results
+
+    def read_catalog(self):
+        """Read the catalog.json file."""
+        filen_name = f"{self.root}/catalog.json"
+        if os.path.isfile(filen_name):
+            with open(filen_name) as f:
+                catalog = json.load(f)
+        else:
+            catalog = None
+        return catalog
+
+    def get_types_from_catalog(self, catalog, stream):
+        """Get the pandas types base on the catalog definition.
+
+        Parameters
+        ----------
+        catalog: dict
+            The singer catalog used on the tap.
+        stream: str
+            The name of the stream.
+
+        Returns
+        -------
+        return: dict
+            Dict with arguments to be used by pandas.
+
+        """
+        filepath = self.input_files.get(stream)
+        headers = pd.read_csv(filepath, nrows=0).columns.tolist()
+
+        streams = next(c for c in catalog["streams"] if c["stream"] == stream or c["tap_stream_id"] == stream)
+        types = streams["schema"]["properties"]
+
+        type_mapper = {"integer": "Int64", "number": float, "boolean": "boolean"}
+
+        dtype = {}
+        parse_dates = []
+        for col in headers:
+            col_type = types.get(col)
+            if col_type:
+                # if col has multiple types, use type with format if it not exists assign type object to support multiple types
+                any_of_list = col_type.get("anyOf", [])
+                if any_of_list:
+                    type_with_format = next((col_t for col_t in any_of_list if "format" in col_t), None)
+                    col_type = type_with_format if type_with_format else {"type": "object"}
+                if col_type.get("format") == "date-time":
+                    parse_dates.append(col)
+                    continue
+                if col_type.get("type"):
+                    catalog_type = [t for t in col_type["type"] if t != "null"]
+                    if len(catalog_type) == 1:
+                        dtype[col] = type_mapper.get(catalog_type[0], "object")
+                        continue
+            dtype[col] = "object"
+
+        return dict(dtype=dtype, parse_dates=parse_dates)
 
 
 def localize_datetime(df, column_name):
