@@ -171,16 +171,8 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
     """
     # Read snapshot file if it exists
     if os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.parquet"):
-<<<<<<< HEAD
-        snapshot = pd.read_parquet(
-            f"{snapshot_dir}/{stream}.snapshot.parquet",
-            use_nullable_dtypes=True,
-            **kwargs,
-        )
-=======
         snapshot = pq.read_table(f"{snapshot_dir}/{stream}.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
         # snapshot = snapshot.convert_dtypes()
->>>>>>> d4bc89b0e45c7d023fca85e1b21d072eea28eb53
     elif os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.csv"):
         snapshot = pd.read_csv(f"{snapshot_dir}/{stream}.snapshot.csv", **kwargs)
     else:
