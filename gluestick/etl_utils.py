@@ -707,3 +707,4 @@ def exception(exception, root_dir, error_message=None):
     with open(f"{root_dir}/errors.txt", "w") as outfile:
         outfile.write(error)
     raise Exception(error)
+

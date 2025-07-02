@@ -1,0 +1,4 @@
+Customer Name,Metadata
+Company 1,"{""FirstName"": ""John"", ""LastName"": ""Smith"", ""Type"": ""Person"", ""SubType"": ""Other""}"
+Company 2,"{""FirstName"": ""Jane"", ""LastName"": ""Smith"", ""Type"": ""Person"", ""SubType"": ""Parent""}"
+

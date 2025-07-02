@@ -432,3 +432,4 @@ def compress_rows_to_col(df: pd.DataFrame, column_prefix: str, pk):
     grouped = df.groupby(pk, axis=0)[column_prefix].apply(list).reset_index()
     df.drop_duplicates(pk, inplace=True)
     return df.merge(grouped, how="left", on=pk)
+
