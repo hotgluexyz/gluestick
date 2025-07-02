@@ -397,6 +397,10 @@ def to_singer(
         catalog_schema or include_all_unified_fields or keep_null_fields
     ):
         df = df.dropna(how="all", axis=1)
+    else:
+        # df.dropna returns a new dataframe so df it's no longer pointing to the original dataframe, 
+        # if dropna is not applied we need to copy it or gen_singer_header will cast the original dataframe datetime columns as strings
+        df = df.copy()
 
     if catalog_schema or catalog_stream:
         # it'll allow_objects but keeping all columns
@@ -419,17 +423,13 @@ def to_singer(
     with open(output, mode) as f:
         with redirect_stdout(f):
             singer.write_schema(stream, header_map, keys)
-            with Transformer() as transformer:
-                for _, row in df.iterrows():
-                    # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
-                    if not (
-                        catalog_schema or include_all_unified_fields or keep_null_fields
-                    ):
-                        filtered_row = row.dropna()
-                    else:
-                        filtered_row = row.where(pd.notna(row), None)
-                    filtered_row = filtered_row.to_dict()
-                    filtered_row = deep_convert_datetimes(filtered_row)
-                    rec = transformer.transform(filtered_row, header_map)
-                    singer.write_record(stream, rec)
-                singer.write_state({})
+            for _, row in df.iterrows():
+                # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
+                if not (catalog_schema or include_all_unified_fields or keep_null_fields):
+                    filtered_row = row.dropna()
+                else:
+                    filtered_row = row.where(pd.notna(row), None)
+                filtered_row = filtered_row.to_dict()
+                filtered_row = deep_convert_datetimes(filtered_row)
+                singer.write_record(stream, filtered_row)
+            singer.write_state({})

@@ -3,6 +3,16 @@
 import hashlib
 import json
 import os
+<<<<<<< HEAD
+=======
+
+import pandas as pd
+import numpy as np
+import pyarrow.parquet as pq
+from datetime import datetime
+from pytz import utc
+from gluestick.singer import to_singer
+>>>>>>> d4bc89b0e45c7d023fca85e1b21d072eea28eb53
 import re
 from datetime import datetime
 
@@ -137,7 +147,9 @@ def read_parquet_folder(path, ignore=[]):
             entity_type = entity_type.rsplit("-", 1)[0]
 
         if entity_type not in results and entity_type not in ignore:
-            results[entity_type] = pd.read_parquet(file, use_nullable_dtypes=True)
+            df = pq.read_table(file, use_threads=False).to_pandas(safe=False, use_threads=False)
+            # df = df.convert_dtypes()
+            results[entity_type] = df
 
     return results
 
@@ -162,11 +174,16 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
     """
     # Read snapshot file if it exists
     if os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.parquet"):
+<<<<<<< HEAD
         snapshot = pd.read_parquet(
             f"{snapshot_dir}/{stream}.snapshot.parquet",
             use_nullable_dtypes=True,
             **kwargs,
         )
+=======
+        snapshot = pq.read_table(f"{snapshot_dir}/{stream}.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
+        # snapshot = snapshot.convert_dtypes()
+>>>>>>> d4bc89b0e45c7d023fca85e1b21d072eea28eb53
     elif os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.csv"):
         snapshot = pd.read_csv(f"{snapshot_dir}/{stream}.snapshot.csv", **kwargs)
     else:
@@ -239,8 +256,6 @@ def snapshot_records(
                             merged_data[column] = merged_data[column].astype("boolean")
                         elif dtype in ["int64", "int32", "Int32", "Int64"]:
                             merged_data[column] = merged_data[column].astype("Int64")
-                        elif dtype == "object":
-                            merged_data[column] = merged_data[column].astype(str)
                         else:
                             merged_data[column] = merged_data[column].astype(dtype)
                 except Exception:
@@ -353,7 +368,7 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
     # If there is a snapshot file compare and filter the hash
     hash_df = None
     if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.parquet"):
-        hash_df = pd.read_parquet(f"{output_dir}/{name}.hash.snapshot.parquet")
+        hash_df = pq.read_table(f"{output_dir}/{name}.hash.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
     elif os.path.isfile(f"{output_dir}/{name}.hash.snapshot.csv"):
         hash_df = pd.read_csv(f"{output_dir}/{name}.hash.snapshot.csv")
 
