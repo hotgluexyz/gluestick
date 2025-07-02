@@ -3,8 +3,6 @@
 import hashlib
 import json
 import os
-<<<<<<< HEAD
-=======
 
 import pandas as pd
 import numpy as np
@@ -12,7 +10,6 @@ import pyarrow.parquet as pq
 from datetime import datetime
 from pytz import utc
 from gluestick.singer import to_singer
->>>>>>> d4bc89b0e45c7d023fca85e1b21d072eea28eb53
 import re
 from datetime import datetime
 
