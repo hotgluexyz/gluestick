@@ -35,12 +35,23 @@ class Reader:
     def __repr__(self):
         return str(list(self.input_files.keys()))
 
+    def read_parquet_with_chunks(self, filepath, chunksize):
+        parquet_file = pq.ParquetFile(filepath)
+
+        for batch in parquet_file.iter_batches(batch_size=chunksize):
+            df = batch.to_pandas(safe=False)
+            # TODO: add support for catalog types
+            yield df
+
     def get(self, stream, default=None, catalog_types=False, **kwargs):
         """Read the selected file."""
         filepath = self.input_files.get(stream)
         if not filepath:
             return default
         if filepath.endswith(".parquet"):
+            if kwargs.get("chunksize"):
+                return self.read_parquet_with_chunks(filepath, kwargs.get("chunksize"))
+
             catalog = self.read_catalog()
             if catalog and catalog_types:
                 try:
