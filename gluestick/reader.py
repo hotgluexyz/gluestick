@@ -3,7 +3,6 @@ import os
 
 import pandas as pd
 import pyarrow as pa
-import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 from pandas.io.parsers import TextFileReader
 
@@ -39,6 +38,7 @@ class Reader:
         return str(list(self.input_files.keys()))
 
     def read_parquet_with_chunks(self, filepath, chunksize):
+        """Read a parquet file in chunks."""
         parquet_file = pq.ParquetFile(filepath)
 
         for batch in parquet_file.iter_batches(batch_size=chunksize):

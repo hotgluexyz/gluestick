@@ -10,7 +10,6 @@ from typing import Any, Dict
 import pandas as pd
 import singer
 from gluestick.reader import Reader
-from singer import Transformer
 
 
 def gen_singer_header(
@@ -398,7 +397,7 @@ def to_singer(
     ):
         df = df.dropna(how="all", axis=1)
     else:
-        # df.dropna returns a new dataframe so df it's no longer pointing to the original dataframe, 
+        # df.dropna returns a new dataframe so df it's no longer pointing to the original dataframe,
         # if dropna is not applied we need to copy it or gen_singer_header will cast the original dataframe datetime columns as strings
         df = df.copy()
 
@@ -425,7 +424,9 @@ def to_singer(
             singer.write_schema(stream, header_map, keys)
             for _, row in df.iterrows():
                 # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
-                if not (catalog_schema or include_all_unified_fields or keep_null_fields):
+                if not (
+                    catalog_schema or include_all_unified_fields or keep_null_fields
+                ):
                     filtered_row = row.dropna()
                 else:
                     filtered_row = row.where(pd.notna(row), None)

@@ -3,19 +3,11 @@
 import hashlib
 import json
 import os
-
-import pandas as pd
-import numpy as np
-import pyarrow.parquet as pq
-from datetime import datetime
-from pytz import utc
-from gluestick.singer import to_singer
 import re
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pyarrow.parquet as pq
 from gluestick.reader import Reader
 from gluestick.singer import to_singer
@@ -144,7 +136,9 @@ def read_parquet_folder(path, ignore=[]):
             entity_type = entity_type.rsplit("-", 1)[0]
 
         if entity_type not in results and entity_type not in ignore:
-            df = pq.read_table(file, use_threads=False).to_pandas(safe=False, use_threads=False)
+            df = pq.read_table(file, use_threads=False).to_pandas(
+                safe=False, use_threads=False
+            )
             # df = df.convert_dtypes()
             results[entity_type] = df
 
@@ -171,7 +165,9 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
     """
     # Read snapshot file if it exists
     if os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.parquet"):
-        snapshot = pq.read_table(f"{snapshot_dir}/{stream}.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
+        snapshot = pq.read_table(
+            f"{snapshot_dir}/{stream}.snapshot.parquet", use_threads=False
+        ).to_pandas(safe=False, use_threads=False)
         # snapshot = snapshot.convert_dtypes()
     elif os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.csv"):
         snapshot = pd.read_csv(f"{snapshot_dir}/{stream}.snapshot.csv", **kwargs)
@@ -357,7 +353,9 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
     # If there is a snapshot file compare and filter the hash
     hash_df = None
     if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.parquet"):
-        hash_df = pq.read_table(f"{output_dir}/{name}.hash.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
+        hash_df = pq.read_table(
+            f"{output_dir}/{name}.hash.snapshot.parquet", use_threads=False
+        ).to_pandas(safe=False, use_threads=False)
     elif os.path.isfile(f"{output_dir}/{name}.hash.snapshot.csv"):
         hash_df = pd.read_csv(f"{output_dir}/{name}.hash.snapshot.csv")
 
