@@ -310,7 +310,7 @@ def to_singer(
     allow_objects=False,
     schema=None,
     unified_model=None,
-    keep_null_fields=True,
+    keep_null_fields=False,
     catalog_stream=None,
     recursive_typing=True
 ):
