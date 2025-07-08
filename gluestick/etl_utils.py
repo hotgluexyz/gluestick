@@ -173,7 +173,7 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 
 def snapshot_records(
-    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, **kwargs
+    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, overwrite=False, **kwargs
 ):
     """Update a snapshot file.
 
@@ -206,7 +206,7 @@ def snapshot_records(
     snapshot = read_snapshots(stream, snapshot_dir, **kwargs)
 
     # If snapshot file and stream data exist update the snapshot
-    if stream_data is not None and snapshot is not None:
+    if not overwrite and stream_data is not None and snapshot is not None:
         snapshot_types = snapshot.dtypes
 
         if localize_datetime_types:
