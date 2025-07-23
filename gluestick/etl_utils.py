@@ -336,8 +336,8 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
             hash_df = hash_df.drop_duplicates(subset=pk)
 
         if updated_flag and pk:
-            updated_pk = df[pk]
-            updated_pk["_updated"] = updated_pk.isin(hash_df[pk])
+            updated_pk = df[pk].merge(hash_df[pk], on=pk, how="inner")
+            updated_pk["_updated"] = True
 
         df = df.merge(
             hash_df[pk + ["hash"]], on=pk + ["hash"], how="left", indicator=True
@@ -347,6 +347,7 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
 
         if updated_flag and pk:
             df = df.merge(updated_pk, on=pk, how="left")
+            df["_updated"] = df["_updated"].fillna(False)
 
     snapshot_records(df[pk + ["hash"]], f"{name}.hash", output_dir, pk, use_csv=use_csv)
     df = df.drop("hash", axis=1)
