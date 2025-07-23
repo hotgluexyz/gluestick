@@ -238,19 +238,21 @@ def snapshot_records(
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
             merged_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
+
         if not just_new:
             return merged_data
+        else:
+            return stream_data
 
     # If there is no snapshot file snapshots and return the new data
-    if stream_data is not None and snapshot is None:
+    if stream_data is not None:
         if use_csv:
             stream_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
             stream_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
         return stream_data
 
-    # If the new data is empty return snapshot
-    if just_new:
+    if just_new or overwrite:
         return stream_data
     else:
         return snapshot
@@ -707,4 +709,3 @@ def exception(exception, root_dir, error_message=None):
     with open(f"{root_dir}/errors.txt", "w") as outfile:
         outfile.write(error)
     raise Exception(error)
-
