@@ -242,7 +242,7 @@ def snapshot_records(
             return merged_data
 
     # If there is no snapshot file snapshots and return the new data
-    if stream_data is not None and snapshot is None:
+    if stream_data is not None:
         if use_csv:
             stream_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
@@ -707,4 +707,3 @@ def exception(exception, root_dir, error_message=None):
     with open(f"{root_dir}/errors.txt", "w") as outfile:
         outfile.write(error)
     raise Exception(error)
-
