@@ -236,8 +236,11 @@ def snapshot_records(
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
             merged_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
+
         if not just_new:
             return merged_data
+        else:
+            return stream_data
 
     # If there is no snapshot file snapshots and return the new data
     if stream_data is not None:
