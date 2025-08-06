@@ -116,7 +116,7 @@ class Reader:
     def get_pk(self, stream):
         """Get pk from parquet file or catalog if available."""
         key_properties = []
-        if self.read_directories().get(stream).endswith(".parquet"):
+        if self.read_directories().get(stream, '').endswith(".parquet"):
             metadata = self.get_metadata(stream)
             if metadata.get("key_properties"):
                 key_properties = eval(metadata["key_properties"])
@@ -124,9 +124,7 @@ class Reader:
             catalog = self.read_catalog()
 
             if catalog is not None:
-                streams = next(
-                    c for c in catalog["streams"] if c.get("stream") == stream
-                )
+                streams = next((c for c in catalog["streams"] if c.get("stream") == stream), {})
                 if streams.get("metadata"):
                     breadcrumb = next(
                         s for s in streams["metadata"] if not s["breadcrumb"]
