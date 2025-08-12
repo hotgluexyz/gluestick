@@ -709,3 +709,72 @@ def exception(exception, root_dir, error_message=None):
     with open(f"{root_dir}/errors.txt", "w") as outfile:
         outfile.write(error)
     raise Exception(error)
+
+def get_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk):
+    """
+    Merges DataFrame with target created snapshot to retrieve existing target ids.
+    
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The DataFrame to be modified.
+    snapshot_dir : str
+        The path of the snapshot directory.
+    stream : str
+        The name of the stream.
+    flow_id : str
+        The id of the flow used to create the snapshot.
+    pk : str
+        The name of the primary key column to output.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The DataFrame with the primary key column added.
+    """
+
+    # if no pk, set it to None and return
+    if not pk:
+        raise Exception(f"No PK found for '{stream}'. Cannot merge.")
+
+    # if no externalId, raise an error
+    if "externalId" not in df.columns:
+        raise Exception(f"'externalId' missing for '{stream}'. Cannot merge.")
+    
+    # read snapshot
+    prefix = f"{stream}_{flow_id}"
+    print(f"Reading snapshot: '{prefix}'")
+    snapshot_data_frame = read_snapshots(prefix, snapshot_dir)
+
+    # if no snapshot, return dataframe
+    if snapshot_data_frame is None or snapshot_data_frame.empty:
+        print(f"No snapshot for '{prefix}'.")
+        return df
+
+    # get ids from snapshot
+    ids = snapshot_data_frame[["InputId", "RemoteId"]].drop_duplicates(
+        subset=["InputId"], keep="last"
+    )
+
+    # merge dataframe with snapshot
+    merged = df.merge(
+        ids,
+        left_on="externalId",
+        right_on="InputId",
+        how="left",
+        suffixes=("", "_snap"),
+    )
+
+    # rename RemoteId to pk
+    if "RemoteId" in merged.columns:
+        merged = merged.rename(columns={"RemoteId": pk})
+
+    # drop InputId (not needed)
+    if "InputId" in merged.columns:
+        merged = merged.drop(columns=["InputId"])
+
+    # set pk to None if not in snapshot
+    if pk in merged.columns:
+        merged[pk] = merged[pk].where(pd.notna(merged[pk]), None)
+    print(f"Finished getting ids from snapshot for '{stream}'.")
+    return merged
