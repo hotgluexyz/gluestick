@@ -188,11 +188,13 @@ class Reader:
 
     def read_catalog(self):
         """Read the catalog.json file."""
-        filen_name = f"{self.root}/catalog.json"
-        if os.path.isfile(filen_name):
-            with open(filen_name) as f:
+        file_name = f"{self.root}/catalog.json"
+        if os.path.isfile(file_name):
+            with open(file_name) as f:
                 catalog = json.load(f)
+            print(f"Finished loading source catalog.")
         else:
+            print(f"Source catalog not found at {file_name}.")
             catalog = None
         return catalog
     
