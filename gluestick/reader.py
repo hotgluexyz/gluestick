@@ -196,7 +196,7 @@ class Reader:
             catalog = None
         return catalog
     
-    def read_target_catalog(self, get_schemas=False):
+    def read_target_catalog(self, process_schema=False):
         """Read the target catalog.json file."""
         filename = f"{self.root}/target-catalog.json"
 
@@ -207,11 +207,11 @@ class Reader:
         with open(filename, "r", encoding="utf-8") as f:
             target_schemas_config = json.load(f)
         
-        if not get_schemas:
+        if not process_schema:
             return target_schemas_config
         
         target_stream_schemas = {}
-        if get_schemas and "streams" in target_schemas_config:
+        if process_schema and "streams" in target_schemas_config:
             for stream_info in target_schemas_config["streams"]:
                 # Use 'stream' preferentially, fallback to 'tap_stream_id'
                 stream_name = stream_info.get("stream") or stream_info.get("tap_stream_id")
