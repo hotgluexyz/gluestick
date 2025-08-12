@@ -778,3 +778,49 @@ def get_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk):
         merged[pk] = merged[pk].where(pd.notna(merged[pk]), None)
     print(f"Finished getting ids from snapshot for '{stream}'.")
     return merged
+
+def read_tenant_mapping(tenant_config, flow_id=None):
+    """Read the tenant mapping from the tenant config.
+
+    Parameters
+    ----------
+    tenant_config : dict
+        The tenant config.
+    """
+    # read mapping from tenant config
+    raw_mapping_data = tenant_config.get("hotglue_mapping", {}).get("mapping", {})
+    if not raw_mapping_data:
+        print("No 'hotglue_mapping.mapping' section found in tenant config.")
+        return {}, {}
+
+    custom_field_mappings = {}
+    stream_name_mapping = {}
+
+    # get flow_id from tenant config
+    potential_flow_id_key = (
+        list(raw_mapping_data.keys())[0]
+        if len(raw_mapping_data) == 1
+        else None
+    )
+
+    flow_id = flow_id or potential_flow_id_key
+    raw_mapping_data = raw_mapping_data.get(flow_id)
+
+    if not raw_mapping_data:
+        print(f"No mapping found for flow_id: {flow_id}")
+        return custom_field_mappings, stream_name_mapping
+    
+    if not isinstance(raw_mapping_data, dict):
+        print(f"Unexpected structure in mapping content: Expected dict, got {type(raw_mapping_data)}")
+        raise ValueError("Invalid mapping structure.")
+
+    # process mapping
+    for combined_stream_name, field_map in raw_mapping_data.items():
+        try:
+            # Key format is SourceStream/TargetStream
+            source_stream, target_stream = combined_stream_name.split("/", 1)
+            custom_field_mappings[source_stream] = field_map
+            stream_name_mapping[source_stream] = target_stream
+        except Exception as e:
+            raise Exception(f"Error processing mapping key '{combined_stream_name}': {e}. Skipping.")
+    return custom_field_mappings, stream_name_mapping
