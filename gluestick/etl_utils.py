@@ -779,7 +779,7 @@ def get_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk):
     print(f"Finished getting ids from snapshot for '{stream}'.")
     return merged
 
-def read_tenant_mapping(tenant_config, flow_id=None):
+def read_tenant_custom_mapping(tenant_config, flow_id=None):
     """Read the tenant mapping from the tenant config.
 
     Parameters
