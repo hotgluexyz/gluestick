@@ -198,6 +198,18 @@ class Reader:
             catalog = None
         return catalog
     
+    def clean_catalog(self, catalog):
+        clean_catalog = {}
+        if "streams" in catalog :
+            for stream_info in catalog ["streams"]:
+                # Use 'stream' preferentially, fallback to 'tap_stream_id'
+                stream_name = stream_info.get("stream") or stream_info.get("tap_stream_id")
+                schema_properties = stream_info.get("schema", {}).get("properties", {})
+                if stream_name and schema_properties:
+                    clean_catalog[stream_name] = schema_properties
+                print(f"Finished loading target schemas for streams: {list(clean_catalog.keys())}")
+        return clean_catalog
+    
     def read_target_catalog(self, process_schema=False):
         """Read the target catalog.json file."""
         filename = f"{self.root}/target-catalog.json"
@@ -207,21 +219,9 @@ class Reader:
             return {}
         
         with open(filename, "r", encoding="utf-8") as f:
-            target_schemas_config = json.load(f)
+            raw_target_catalog = json.load(f)
         
-        if not process_schema:
-            return target_schemas_config
-        
-        target_stream_schemas = {}
-        if process_schema and "streams" in target_schemas_config:
-            for stream_info in target_schemas_config["streams"]:
-                # Use 'stream' preferentially, fallback to 'tap_stream_id'
-                stream_name = stream_info.get("stream") or stream_info.get("tap_stream_id")
-                schema_properties = stream_info.get("schema", {}).get("properties", {})
-                if stream_name and schema_properties:
-                    target_stream_schemas[stream_name] = schema_properties
-                print(f"Finished loading target schemas for streams: {list(target_stream_schemas.keys())}")
-        return target_stream_schemas, target_schemas_config
+        return raw_target_catalog , self.clean_catalog(raw_target_catalog)
 
     def get_types_from_catalog(self, catalog, stream, headers=None):
         """Get the pandas types base on the catalog definition.
