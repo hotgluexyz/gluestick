@@ -207,7 +207,7 @@ class Reader:
                 schema_properties = stream_info.get("schema", {}).get("properties", {})
                 if stream_name and schema_properties:
                     clean_catalog[stream_name] = schema_properties
-                print(f"Finished loading target schemas for streams: {list(clean_catalog.keys())}")
+        print(f"Finished loading target schemas for streams: {list(clean_catalog.keys())}")
         return clean_catalog
     
     def read_target_catalog(self, process_schema=False):
