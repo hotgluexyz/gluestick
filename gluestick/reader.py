@@ -221,7 +221,7 @@ class Reader:
         with open(filename, "r", encoding="utf-8") as f:
             raw_target_catalog = json.load(f)
         
-        if process_schema:
+        if not process_schema:
             return raw_target_catalog
         
         return raw_target_catalog , self.clean_catalog(raw_target_catalog)
