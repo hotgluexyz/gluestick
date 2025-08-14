@@ -710,7 +710,7 @@ def exception(exception, root_dir, error_message=None):
         outfile.write(error)
     raise Exception(error)
 
-def get_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk):
+def merge_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk):
     """
     Merges DataFrame with target created snapshot to retrieve existing target ids.
     
