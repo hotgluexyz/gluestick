@@ -188,13 +188,43 @@ class Reader:
 
     def read_catalog(self):
         """Read the catalog.json file."""
-        filen_name = f"{self.root}/catalog.json"
-        if os.path.isfile(filen_name):
-            with open(filen_name) as f:
+        file_name = f"{self.root}/catalog.json"
+        if os.path.isfile(file_name):
+            with open(file_name) as f:
                 catalog = json.load(f)
+            print(f"Finished loading source catalog.")
         else:
+            print(f"Source catalog not found at {file_name}.")
             catalog = None
         return catalog
+    
+    def clean_catalog(self, catalog):
+        clean_catalog = {}
+        if "streams" in catalog :
+            for stream_info in catalog ["streams"]:
+                # Use 'stream' preferentially, fallback to 'tap_stream_id'
+                stream_name = stream_info.get("stream") or stream_info.get("tap_stream_id")
+                schema_properties = stream_info.get("schema", {}).get("properties", {})
+                if stream_name and schema_properties:
+                    clean_catalog[stream_name] = schema_properties
+        print(f"Finished loading target schemas for streams: {list(clean_catalog.keys())}")
+        return clean_catalog
+    
+    def read_target_catalog(self, process_schema=False):
+        """Read the target catalog.json file."""
+        filename = f"{self.root}/target-catalog.json"
+
+        if not os.path.exists(filename):
+            print(f"Target catalog not found at {filename}.")
+            return None
+        
+        with open(filename, "r", encoding="utf-8") as f:
+            raw_target_catalog = json.load(f)
+        
+        if not process_schema:
+            return raw_target_catalog
+        
+        return raw_target_catalog , self.clean_catalog(raw_target_catalog)
 
     def get_types_from_catalog(self, catalog, stream, headers=None):
         """Get the pandas types base on the catalog definition.
