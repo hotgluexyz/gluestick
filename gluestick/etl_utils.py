@@ -6,6 +6,7 @@ import os
 
 import pandas as pd
 import numpy as np
+import pyarrow.parquet as pq
 from datetime import datetime
 from pytz import utc
 from gluestick.singer import to_singer
@@ -135,7 +136,9 @@ def read_parquet_folder(path, ignore=[]):
             entity_type = entity_type.rsplit("-", 1)[0]
 
         if entity_type not in results and entity_type not in ignore:
-            results[entity_type] = pd.read_parquet(file, use_nullable_dtypes=True)
+            df = pq.read_table(file, use_threads=False).to_pandas(safe=False, use_threads=False)
+            # df = df.convert_dtypes()
+            results[entity_type] = df
 
     return results
 
@@ -160,7 +163,8 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
     """
     # Read snapshot file if it exists
     if os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.parquet"):
-        snapshot = pd.read_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", use_nullable_dtypes=True, **kwargs)
+        snapshot = pq.read_table(f"{snapshot_dir}/{stream}.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
+        # snapshot = snapshot.convert_dtypes()
     elif os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.csv"):
         snapshot = pd.read_csv(f"{snapshot_dir}/{stream}.snapshot.csv", **kwargs)
     else:
@@ -169,7 +173,7 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 
 def snapshot_records(
-    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, **kwargs
+    stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, overwrite=False, **kwargs
 ):
     """Update a snapshot file.
 
@@ -202,7 +206,7 @@ def snapshot_records(
     snapshot = read_snapshots(stream, snapshot_dir, **kwargs)
 
     # If snapshot file and stream data exist update the snapshot
-    if stream_data is not None and snapshot is not None:
+    if not overwrite and stream_data is not None and snapshot is not None:
         snapshot_types = snapshot.dtypes
 
         if localize_datetime_types:
@@ -223,8 +227,6 @@ def snapshot_records(
                             merged_data[column] = merged_data[column].astype('boolean')
                         elif dtype in ["int64", "int32", "Int32", "Int64"]:
                             merged_data[column] = merged_data[column].astype("Int64")
-                        elif dtype == 'object':
-                            merged_data[column] = merged_data[column].astype(str)
                         else:
                             merged_data[column] = merged_data[column].astype(dtype)
                 except Exception as e:
@@ -236,19 +238,21 @@ def snapshot_records(
             merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
             merged_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
+
         if not just_new:
             return merged_data
+        else:
+            return stream_data
 
     # If there is no snapshot file snapshots and return the new data
-    if stream_data is not None and snapshot is None:
+    if stream_data is not None:
         if use_csv:
             stream_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
         else:
             stream_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
         return stream_data
 
-    # If the new data is empty return snapshot
-    if just_new:
+    if just_new or overwrite:
         return stream_data
     else:
         return snapshot
@@ -323,7 +327,7 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
     # If there is a snapshot file compare and filter the hash
     hash_df = None
     if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.parquet"):
-        hash_df = pd.read_parquet(f"{output_dir}/{name}.hash.snapshot.parquet")
+        hash_df = pq.read_table(f"{output_dir}/{name}.hash.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
     elif os.path.isfile(f"{output_dir}/{name}.hash.snapshot.csv"):
         hash_df = pd.read_csv(f"{output_dir}/{name}.hash.snapshot.csv")
 
@@ -334,8 +338,8 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
             hash_df = hash_df.drop_duplicates(subset=pk)
 
         if updated_flag and pk:
-            updated_pk = df[pk]
-            updated_pk["_updated"] = updated_pk.isin(hash_df[pk])
+            updated_pk = df[pk].merge(hash_df[pk], on=pk, how="inner")
+            updated_pk["_updated"] = True
 
         df = df.merge(
             hash_df[pk + ["hash"]], on=pk + ["hash"], how="left", indicator=True
@@ -345,6 +349,7 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
 
         if updated_flag and pk:
             df = df.merge(updated_pk, on=pk, how="left")
+            df["_updated"] = df["_updated"].fillna(False)
 
     snapshot_records(df[pk + ["hash"]], f"{name}.hash", output_dir, pk, use_csv=use_csv)
     df = df.drop("hash", axis=1)
@@ -705,3 +710,118 @@ def exception(exception, root_dir, error_message=None):
     with open(f"{root_dir}/errors.txt", "w") as outfile:
         outfile.write(error)
     raise Exception(error)
+
+def merge_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk):
+    """
+    Merges DataFrame with target created snapshot to retrieve existing target ids.
+    
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The DataFrame to be modified.
+    snapshot_dir : str
+        The path of the snapshot directory.
+    stream : str
+        The name of the stream.
+    flow_id : str
+        The id of the flow used to create the snapshot.
+    pk : str
+        The name of the primary key column to output.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The DataFrame with the primary key column added.
+    """
+
+    # if no pk, set it to None and return
+    if not pk:
+        raise Exception(f"No PK found for '{stream}'. Cannot merge.")
+
+    # if no externalId, raise an error
+    if "externalId" not in df.columns:
+        raise Exception(f"'externalId' missing for '{stream}'. Cannot merge.")
+    
+    # read snapshot
+    prefix = f"{stream}_{flow_id}"
+    print(f"Reading snapshot: '{prefix}'")
+    snapshot_data_frame = read_snapshots(prefix, snapshot_dir)
+
+    # if no snapshot, return dataframe
+    if snapshot_data_frame is None or snapshot_data_frame.empty:
+        print(f"No snapshot for '{prefix}'.")
+        return df
+
+    # get ids from snapshot
+    ids = snapshot_data_frame[["InputId", "RemoteId"]].drop_duplicates(
+        subset=["InputId"], keep="last"
+    )
+
+    # merge dataframe with snapshot
+    merged = df.merge(
+        ids,
+        left_on="externalId",
+        right_on="InputId",
+        how="left",
+        suffixes=("", "_snap"),
+    )
+
+    # rename RemoteId to pk
+    if "RemoteId" in merged.columns:
+        merged = merged.rename(columns={"RemoteId": pk})
+
+    # drop InputId (not needed)
+    if "InputId" in merged.columns:
+        merged = merged.drop(columns=["InputId"])
+
+    # set pk to None if not in snapshot
+    if pk in merged.columns:
+        merged[pk] = merged[pk].where(pd.notna(merged[pk]), None)
+    print(f"Finished getting ids from snapshot for '{stream}'.")
+    return merged
+
+def read_tenant_custom_mapping(tenant_config, flow_id=None):
+    """Read the tenant mapping from the tenant config.
+
+    Parameters
+    ----------
+    tenant_config : dict
+        The tenant config.
+    """
+    # read mapping from tenant config
+    raw_mapping_data = tenant_config.get("hotglue_mapping", {}).get("mapping", {})
+    if not raw_mapping_data:
+        print("No 'hotglue_mapping.mapping' section found in tenant config.")
+        return {}, {}
+
+    custom_field_mappings = {}
+    stream_name_mapping = {}
+
+    # get flow_id from tenant config
+    potential_flow_id_key = (
+        list(raw_mapping_data.keys())[0]
+        if len(raw_mapping_data) == 1
+        else None
+    )
+
+    flow_id = flow_id or potential_flow_id_key
+    raw_mapping_data = raw_mapping_data.get(flow_id)
+
+    if not raw_mapping_data:
+        print(f"No mapping found for flow_id: {flow_id}")
+        return custom_field_mappings, stream_name_mapping
+    
+    if not isinstance(raw_mapping_data, dict):
+        print(f"Unexpected structure in mapping content: Expected dict, got {type(raw_mapping_data)}")
+        raise ValueError("Invalid mapping structure.")
+
+    # process mapping
+    for combined_stream_name, field_map in raw_mapping_data.items():
+        try:
+            # Key format is SourceStream/TargetStream
+            source_stream, target_stream = combined_stream_name.split("/", 1)
+            custom_field_mappings[source_stream] = field_map
+            stream_name_mapping[source_stream] = target_stream
+        except Exception as e:
+            raise Exception(f"Error processing mapping key '{combined_stream_name}': {e}. Skipping.")
+    return custom_field_mappings, stream_name_mapping

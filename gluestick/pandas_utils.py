@@ -330,6 +330,7 @@ def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
 
     """
     drop = kwargs.get("drop", True)
+    expected_keys = kwargs.get("expected_keys", ["value", "name"])
 
     if not kwargs.get("inplace"):
         df = df.copy()
@@ -343,8 +344,12 @@ def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
 
     cols = df[column_name].apply(lambda x: x.keys()).explode().unique().tolist()
     cols = [x for x in cols if x == x]
-    default_dict = {c: np.nan for c in cols}
-    cols = [f"{column_name}.{col}" for col in cols]
+    if cols:
+        default_dict = {c: np.nan for c in cols}
+        cols = [f"{column_name}.{col}" for col in cols]
+    else:
+        default_dict = {c: np.nan for c in expected_keys}
+        cols = [f"{column_name}.{col}" for col in expected_keys]
 
     def set_default_dict(object, default_dict):
         if isinstance(object, dict):
@@ -427,3 +432,4 @@ def compress_rows_to_col(df: pd.DataFrame, column_prefix: str, pk):
     grouped = df.groupby(pk, axis=0)[column_prefix].apply(list).reset_index()
     df.drop_duplicates(pk, inplace=True)
     return df.merge(grouped, how="left", on=pk)
+
