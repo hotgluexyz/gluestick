@@ -21,6 +21,6 @@ setup(
     author="hotglue",
     author_email="hello@hotglue.xyz",
     license="MIT",
-    packages=["gluestick", "gluestick.*"],
+    packages=find_packages(include=["gluestick", "gluestick.*"]),
     zip_safe=False,
 )
