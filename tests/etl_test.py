@@ -160,7 +160,7 @@ class TestETL(object):
             
             # Test singer export
             gs.to_export(
-                data=campaign_parquet_df,
+                campaign_parquet_df,
                 name=stream_name,
                 output_dir=output_dir,
                 keys=["id"]
@@ -182,7 +182,7 @@ class TestETL(object):
                 csv_output_file.unlink()
             
             gs.to_export(
-                data=df,
+                df,
                 name=stream_name,
                 output_dir=output_dir,
                 export_format="csv",
@@ -205,7 +205,7 @@ class TestETL(object):
             true_output_df = pd.read_parquet(path=output_parquet_path)
             
             gs.to_export(
-                data=df,
+                df,
                 name=stream_name,
                 output_dir=output_dir,
                 export_format="parquet",
