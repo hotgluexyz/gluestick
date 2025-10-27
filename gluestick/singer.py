@@ -5,12 +5,12 @@ import datetime
 import json
 import os
 from contextlib import redirect_stdout
-
+from functools import singledispatch, partial
 import pandas as pd
 import singer
 from gluestick.reader import Reader
 from singer import Transformer
-
+import polars as pl
 
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
     """Generate singer headers based on pandas types.
@@ -300,8 +300,24 @@ def parse_df_cols(df, schema):
             df[col] = df[col].apply(lambda x: parse_objs(x))
     return df
 
-
+@singledispatch
 def to_singer(
+    df,
+    stream,
+    output_dir,
+    keys=[],
+    filename="data.singer",
+    allow_objects=False,
+    schema=None,
+    unified_model=None,
+    keep_null_fields=False,
+    catalog_stream=None,
+    recursive_typing=True
+):
+    raise NotImplementedError("to_singer is not implemented for this type")
+
+@to_singer.register(pd.DataFrame)
+def pandas_df_to_singer(
     df: pd.DataFrame,
     stream,
     output_dir,
@@ -379,3 +395,165 @@ def to_singer(
                 filtered_row = deep_convert_datetimes(filtered_row)
                 singer.write_record(stream, filtered_row)
             singer.write_state({})
+
+
+
+def gen_singer_header_stringify_nonprimitives(
+    schema: pl.Schema
+) -> dict:
+    """
+    Generate Singer headers from a Polars schema, stringifying all non-primitive types.
+
+    Parameters
+    ----------
+    schema : pl.Schema
+        Polars DataFrame schema.
+
+    Returns
+    -------
+    dict
+        Singer schema dictionary with non-primitives stringified.
+    """
+    primitive_mapping = {
+        "Float64": {"type": ["number", "null"]},
+        "Float32": {"type": ["number", "null"]},
+        "Int64": {"type": ["integer", "null"]},
+        "Int32": {"type": ["integer", "null"]},
+        "Int16": {"type": ["integer", "null"]},
+        "Int8": {"type": ["integer", "null"]},
+        "UInt64": {"type": ["integer", "null"]},
+        "UInt32": {"type": ["integer", "null"]},
+        "UInt16": {"type": ["integer", "null"]},
+        "UInt8": {"type": ["integer", "null"]},
+        "Boolean": {"type": ["boolean", "null"]},
+        "Utf8": {"type": ["string", "null"]},
+        "Date": {"type": ["string", "null"], "format": "date"},
+        "Datetime": {"type": ["string", "null"], "format": "date-time"},
+        "Time": {"type": ["string", "null"], "format": "time"},
+    }
+
+    def map_dtype(dtype) -> dict:
+        dtype_name = str(dtype)
+        # Only primitive types keep their mapping
+        return primitive_mapping.get(dtype_name, {"type": ["string", "null"]})
+
+    header_map = {
+        "type": ["object", "null"],
+        "properties": {col: map_dtype(dtype) for col, dtype in schema.items()}
+    }
+
+    return header_map
+
+
+
+@to_singer.register(pl.DataFrame)
+def polars_df_to_singer(
+    df: pl.DataFrame,
+    stream,
+    output_dir,
+    keys=[],
+    filename="data.singer",
+    allow_objects=False,
+    schema=None,
+    unified_model=None,
+    keep_null_fields=False,
+    catalog_stream=None,
+    recursive_typing=True
+):
+    """Convert a polars DataFrame into a singer file.
+
+    Parameters
+    ----------
+    df: pl.DataFrame
+        Polars DataFrame to convert to singer.
+    stream: str
+        Stream name to be used in the singer output file.
+    output_dir: str
+        Path to the output directory.
+    keys: list
+        The primary-keys to be used.
+    filename: str
+        The output file name.
+    allow_objects: boolean
+        Allow or not objects to the parsed, if false defaults types to str.
+    keep_null_fields: boolean
+        Flag to keep all null fields
+    catalog_stream: str
+        Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
+        If this is not set it will use stream parameter to generate the catalog
+    recursive_typing: boolean
+        If true, the function will recursively convert arrays of objects to arrays of primitives.
+        If false, the function will fuzzy list types when generating singer header.
+    """
+
+    output = os.path.join(output_dir, filename)
+    mode = "a" if os.path.isfile(output) else "w"
+
+    header_map = gen_singer_header_stringify_nonprimitives(df.schema)
+    
+
+
+    with open(output, mode) as f:
+        with redirect_stdout(f):
+            singer.write_schema(stream, header_map, keys)
+            for row in df.iter_rows(named=True):
+                row = {k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(v, datetime.datetime) else v for k, v in row.items()}
+                singer.write_record(stream, row)
+
+
+            
+
+@to_singer.register(pl.LazyFrame)
+def polars_lf_to_singer(
+    df: pl.LazyFrame,
+    stream,
+    output_dir,
+    keys=[],
+    filename="data.singer",
+    allow_objects=False,
+    schema=None,
+    unified_model=None,
+    keep_null_fields=False,
+    catalog_stream=None,
+    recursive_typing=True
+):
+    """Convert a polars Lazyframe into a singer file.
+
+    Parameters
+    ----------
+    df: pd.DataFrame
+        Object to extract the types from.
+    stream: str
+        Stream name to be used in the singer output file.
+    output_dir: str
+        Path to the output directory.
+    keys: list
+        The primary-keys to be used.
+    filename: str
+        The output file name.
+    allow_objects: boolean
+        Allow or not objects to the parsed, if false defaults types to str.
+    keep_null_fields: boolean
+        Flag to keep all null fields
+    catalog_stream: str
+        Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
+        If this is not set it will use stream parameter to generate the catalog
+    recursive_typing: boolean
+        If true, the function will recursively convert arrays of objects to arrays of primitives.
+        If false, the function will fuzzy list types when generating singer header.
+    """
+
+    sink_fn = partial(
+        polars_df_to_singer,
+        stream=stream,
+        output_dir=output_dir,
+        keys=keys,
+        filename=filename,
+        allow_objects=allow_objects,
+        schema=schema,
+        unified_model=unified_model,
+        keep_null_fields=keep_null_fields,
+        catalog_stream=catalog_stream,
+        recursive_typing=recursive_typing,
+    )
+    df.sink_batches(sink_fn, chunk_size=1000)

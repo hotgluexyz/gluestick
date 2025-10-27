@@ -12,6 +12,9 @@ from pytz import utc
 from gluestick.singer import to_singer
 import re
 from gluestick.reader import Reader
+import polars as pl
+from gluestick.readers.pl_lazyframe_reader import PLLazyFrameReader
+from functools import singledispatch
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -585,7 +588,24 @@ def format_str_safely(str_to_format, **format_variables):
     return str_output
 
 
+@singledispatch
 def to_export(
+    data,
+    name, 
+    output_dir, 
+    keys=[], 
+    unified_model=None, 
+    export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"), 
+    output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"), 
+    schema=None, 
+    stringify_objects=False, 
+    reserved_variables={}
+    ):
+    raise NotImplementedError("to_export is not implemented for this dataframe type")
+
+
+@to_export.register(pd.DataFrame)
+def pandas_df_to_export(
     data,
     name,
     output_dir,
@@ -668,6 +688,80 @@ def to_export(
         data.to_json(f"{output_dir}/{composed_name}.jsonl", orient='records', lines=True, date_format='iso')
     else:
         data.to_csv(f"{output_dir}/{composed_name}.csv", index=False)
+
+
+@to_export.register(pl.LazyFrame)
+def polars_lf_to_export(
+    data,
+    name,
+    output_dir,
+    keys=[],
+    unified_model=None,
+    export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"),
+    output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"),
+    schema=None,
+    stringify_objects=False,
+    reserved_variables={},
+):
+    """Write a Polars LazyFrame to a specified format.
+
+    Notes
+    -----
+    This function will export the input data to a specified format
+
+    Parameters
+    ----------
+    data: Polars LazyFrame
+        Polars LazyFrame that will be transformed to a specified format.
+    name: str
+        name of the output file
+    output_dir: str
+        path of the folder that will store the output file
+    output_file_prefix: str
+        prefix of the output file name if needed
+    export_format: str
+        format to which the dataframe will be transformed
+        supported values are: singer, parquet, json and csv
+    unified_model: pydantic model
+        pydantic model used to generate the schema for export format
+        'singer'
+    schema: dict
+        customized schema used for export format 'singer'
+    stringify_objects: bool
+        for parquet files it will stringify complex structures as arrays
+        of objects
+    reserved_variables: dict
+        A dictionary of default values for the format variables to be used
+        in the output_file_prefix.
+
+    Returns
+    -------
+    return: file
+        it outputs a singer, parquet, json or csv file
+
+    """
+    if output_file_prefix:
+        # format output_file_prefix with env variables
+        format_variables = build_string_format_variables(
+            default_kwargs=reserved_variables
+        )
+        output_file_prefix = format_str_safely(output_file_prefix, **format_variables)
+        composed_name = f"{output_file_prefix}{name}"
+    else:
+        composed_name = name
+
+    if export_format == "singer":
+        # get pk
+        reader = PLLazyFrameReader()
+        keys = keys or reader.get_pk(name)
+        # export data as singer
+        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+    elif export_format == "parquet":
+        data.sink_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
+    elif export_format == "csv":
+        data.sink_csv(os.path.join(output_dir, f"{composed_name}.csv"))
+    else:
+        raise ValueError(f"Unsupported export format: {export_format}")
 
 
 def localize_datetime(df, column_name):
