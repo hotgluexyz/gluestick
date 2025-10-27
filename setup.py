@@ -5,8 +5,8 @@ with open("README.md", "r") as fh:
 
 setup(
     name="gluestick",
-    version="2.2.24",
-    description="ETL utility functions built on Pandas",
+    version="3.0.0",
+    description="ETL utility functions built for the hotglue iPaaS platform",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/hotgluexyz/gluestick",
