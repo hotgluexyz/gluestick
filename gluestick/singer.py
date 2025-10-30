@@ -9,7 +9,6 @@ from functools import singledispatch, partial
 import pandas as pd
 import singer
 from gluestick.reader import Reader
-from singer import Transformer
 import polars as pl
 
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
