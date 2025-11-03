@@ -5,7 +5,7 @@ import polars as pl
 import pandas as pd
 
 
-class PLReader(Reader):
+class PolarsReader(Reader):
 
     def get(self, stream, default=None, catalog_types=True) -> pl.DataFrame | None:
         """

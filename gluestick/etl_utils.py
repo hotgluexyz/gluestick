@@ -14,7 +14,7 @@ import re
 from gluestick.reader import Reader
 import polars as pl
 from gluestick.readers.pl_lazyframe_reader import PLLazyFrameReader
-from gluestick.readers.pl_reader import PLReader
+from gluestick.readers.pl_reader import PolarsReader
 from functools import singledispatch
 
 
@@ -826,7 +826,7 @@ def polars_df_to_export(
 
     if export_format == "singer":
         # get pk
-        reader = PLReader()
+        reader = PolarsReader()
         keys = keys or reader.get_pk(name)
         # export data as singer
         to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
