@@ -32,3 +32,8 @@ def cast_lf_from_schema(lf: pl.LazyFrame, types_params: dict):
     return lf.with_columns([
                     pl.col(col).cast(dtype, strict=True) for col, dtype in types_params.items()
             ])
+
+def cast_df_from_schema(df: pl.DataFrame, types_params: dict):
+    return df.with_columns([
+                    pl.col(col).cast(dtype, strict=True) for col, dtype in types_params.items()
+            ])

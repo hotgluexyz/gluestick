@@ -5,3 +5,4 @@ from .pandas_utils import *  # noqa
 from .singer import *  # noqa
 from .reader import *  # noqa
 from .readers.pl_lazyframe_reader import *  # noqa
+from .readers.pl_reader import *  # noqa
