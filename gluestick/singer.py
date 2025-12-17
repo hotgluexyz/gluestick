@@ -397,11 +397,11 @@ def pandas_df_to_singer(
 
 
 
-def gen_singer_header_stringify_nonprimitives(
+def gen_singer_header_from_polars_schema(
     schema: pl.Schema
 ) -> dict:
     """
-    Generate Singer headers from a Polars schema, stringifying all non-primitive types.
+    Generate Singer headers from a Polars schema.
 
     Parameters
     ----------
@@ -434,6 +434,14 @@ def gen_singer_header_stringify_nonprimitives(
     def map_dtype(dtype) -> dict:
         dtype_name = str(dtype)
         # Only primitive types keep their mapping
+        if dtype_name.startswith("Struct("):
+            return {"type": ["object", "null"]}
+        
+        if dtype_name.startswith("Datetime("):
+            return {"type": ["string", "null"], "format": "date-time"}
+        
+        if dtype_name.startswith("List("):
+            return {"type": ["array", "null"], "items": {"type": ["any", "null"]}}
         return primitive_mapping.get(dtype_name, {"type": ["string", "null"]})
 
     header_map = {
@@ -442,7 +450,6 @@ def gen_singer_header_stringify_nonprimitives(
     }
 
     return header_map
-
 
 
 @to_singer.register(pl.DataFrame)
@@ -488,8 +495,8 @@ def polars_df_to_singer(
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
 
-    header_map = gen_singer_header_stringify_nonprimitives(df.schema)
-    
+    header_map = gen_singer_header_from_polars_schema(df.schema)
+ 
 
 
     with open(output, mode) as f:
