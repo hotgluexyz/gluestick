@@ -220,7 +220,6 @@ class TestETL(object):
                 print("Dtype in test: ", test_output_df[col].dtype)
                 print("Dtype in true: ", true_output_df[col].dtype)
                 assert test_output_df[col].equals(true_output_df[col]), f"{type} -> Column {col} is incorrect"
-        print("test to_export output is correct")
 
     # Tests for map_fields function
     def test_map_fields_simple_flat_mapping(self):
