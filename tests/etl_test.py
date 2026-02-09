@@ -2,7 +2,12 @@ import os
 import json
 import gluestick as gs
 import pandas as pd
-from tests.function_tests.map_fields import *
+
+try:
+    import tests.function_tests.map_fields as map_fields_module
+except ModuleNotFoundError:
+    # When run directly (e.g. from launch.json), script dir is on path, not project root
+    import function_tests.map_fields as map_fields_module
 
 # Tests gluestick ETL utilities
 class TestETL(object):
@@ -225,10 +230,10 @@ class TestETL(object):
         print("=====")
         print("test_map_fields")
 
-        # Call all test functions from map_fields.py
-        test_map_fields_simple_flat_mapping()
-        test_map_fields_list_mapping()
-        test_map_fields_none_value()
-        test_map_fields_nonexistent_field()
-        test_map_fields_deeply_nested()
+        # Call all test functions from map_fields.py (via module to avoid duplicate pytest collection)
+        map_fields_module.test_map_fields_simple_flat_mapping()
+        map_fields_module.test_map_fields_list_mapping()
+        map_fields_module.test_map_fields_none_value()
+        map_fields_module.test_map_fields_nonexistent_field()
+        map_fields_module.test_map_fields_deeply_nested()
         
