@@ -168,6 +168,9 @@ def unwrap_json_schema(schema):
         if isinstance(schema, dict):
             if 'anyOf' in schema:
                 types = [item.get('type') for item in schema['anyOf'] if 'type' in item]
+                # if there's no types other than null, means it should support any type, return an empty dict to do it so
+                if len(types) == 1 and types[0] == "null":
+                    return {}
 
                 # Handle cases where anyOf contains more than just type definitions
                 # For example, when it includes properties or other nested structures
@@ -299,6 +302,39 @@ def parse_df_cols(df, schema):
             df[col] = df[col].apply(lambda x: parse_objs(x))
     return df
 
+
+def remove_nulls_deep(data):
+    """
+    Recursively remove null or NaN values from a nested data structure.
+
+    Parameters
+    ----------
+    data : dict, list, or pd.Series
+        The data structure to clean. This can be:
+        - A dictionary with nested elements
+        - A list of nested elements
+        - A pandas Series (such as a row from a DataFrame)
+
+    """
+    if isinstance(data, pd.Series):
+        data = data.to_dict()  # Convert to plain dict for recursion
+
+    if isinstance(data, dict):
+        return {
+            k: remove_nulls_deep(v)
+            for k, v in data.items()
+            if v is not None and not (isinstance(v, float) and pd.isna(v))
+        }
+    elif isinstance(data, list):
+        return [
+            remove_nulls_deep(item)
+            for item in data
+            if item is not None and not (isinstance(item, float) and pd.isna(item))
+        ]
+    else:
+        return data
+
+
 @singledispatch
 def to_singer(
     df,
@@ -327,6 +363,7 @@ def pandas_df_to_singer(
     unified_model=None,
     keep_null_fields=False,
     catalog_stream=None,
+    trim_nested_nulls=False,
     recursive_typing=True
 ):
     """Convert a pandas DataFrame into a singer file.
@@ -350,6 +387,8 @@ def pandas_df_to_singer(
     catalog_stream: str
         Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
         If this is not set it will use stream parameter to generate the catalog
+    trim_nested_nulls: bool
+        Flag to trims nulls from nested fields
     recursive_typing: boolean
         If true, the function will recursively convert arrays of objects to arrays of primitives.
         If false, the function will fuzzy list types when generating singer header.
@@ -390,11 +429,15 @@ def pandas_df_to_singer(
                     filtered_row = row.dropna()
                 else:
                     filtered_row = row.where(pd.notna(row), None)
-                filtered_row = filtered_row.to_dict()
+
+                if trim_nested_nulls and not (catalog_schema or include_all_unified_fields or keep_null_fields):
+                    filtered_row = remove_nulls_deep(filtered_row)
+                else:      
+                    filtered_row = filtered_row.to_dict()
+
                 filtered_row = deep_convert_datetimes(filtered_row)
                 singer.write_record(stream, filtered_row)
             singer.write_state({})
-
 
 
 def gen_singer_header_from_polars_schema(
