@@ -168,7 +168,7 @@ def unwrap_json_schema(schema):
         if isinstance(schema, dict):
             if 'anyOf' in schema:
                 types = [item.get('type') for item in schema['anyOf'] if 'type' in item]
-                # if there's no types means it should support any type, return an empty dict to do it so
+                # if there's no types other than null, means it should support any type, return an empty dict to do it so
                 if len(types) == 1 and types[0] == "null":
                     return {}
 
