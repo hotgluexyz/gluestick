@@ -6,3 +6,4 @@ from .singer import *  # noqa
 from .reader import *  # noqa
 from .readers.pl_lazyframe_reader import *  # noqa
 from .readers.pl_reader import *  # noqa
+from .etl_utils_v2 import *  # noqa
