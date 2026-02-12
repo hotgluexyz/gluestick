@@ -5,12 +5,11 @@ import datetime
 import json
 import os
 from contextlib import redirect_stdout
-
+from functools import singledispatch, partial
 import pandas as pd
 import singer
 from gluestick.reader import Reader
-from singer import Transformer
-
+import polars as pl
 
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
     """Generate singer headers based on pandas types.
@@ -336,7 +335,24 @@ def remove_nulls_deep(data):
         return data
 
 
+@singledispatch
 def to_singer(
+    df,
+    stream,
+    output_dir,
+    keys=[],
+    filename="data.singer",
+    allow_objects=False,
+    schema=None,
+    unified_model=None,
+    keep_null_fields=False,
+    catalog_stream=None,
+    recursive_typing=True
+):
+    raise NotImplementedError("to_singer is not implemented for this type")
+
+@to_singer.register(pd.DataFrame)
+def pandas_df_to_singer(
     df: pd.DataFrame,
     stream,
     output_dir,
@@ -345,7 +361,7 @@ def to_singer(
     allow_objects=False,
     schema=None,
     unified_model=None,
-    keep_null_fields=True,
+    keep_null_fields=False,
     catalog_stream=None,
     trim_nested_nulls=False,
     recursive_typing=True
@@ -383,6 +399,10 @@ def to_singer(
     # drop columns with all null values except when we want to keep null fields
     if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
         df = df.dropna(how="all", axis=1)
+    else:
+        # df.dropna returns a new dataframe so df it's no longer pointing to the original dataframe, 
+        # if dropna is not applied we need to copy it or gen_singer_header will cast the original dataframe datetime columns as strings
+        df = df.copy()
 
     if catalog_schema or catalog_stream:
         # it'll allow_objects but keeping all columns
@@ -403,21 +423,187 @@ def to_singer(
     with open(output, mode) as f:
         with redirect_stdout(f):
             singer.write_schema(stream, header_map, keys)
-            with Transformer() as transformer:
-                for _, row in df.iterrows():
-                    # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
-                    if not (catalog_schema or include_all_unified_fields or keep_null_fields):
-                        filtered_row = row.dropna()
-                    else:
-                        filtered_row = row.where(pd.notna(row), None)
-                    
-                    # trim nested null fields
-                    if trim_nested_nulls:
-                        filtered_row = remove_nulls_deep(filtered_row)
-                    else:      
-                        filtered_row = filtered_row.to_dict()
+            for _, row in df.iterrows():
+                # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
+                if not (catalog_schema or include_all_unified_fields or keep_null_fields):
+                    filtered_row = row.dropna()
+                else:
+                    filtered_row = row.where(pd.notna(row), None)
 
-                    filtered_row = deep_convert_datetimes(filtered_row)
-                    rec = transformer.transform(filtered_row, header_map)
-                    singer.write_record(stream, rec)
-                singer.write_state({})
+                # trim nested null fields
+                if trim_nested_nulls:
+                    filtered_row = remove_nulls_deep(filtered_row)
+                else:      
+                    filtered_row = filtered_row.to_dict()
+
+                filtered_row = deep_convert_datetimes(filtered_row)
+                singer.write_record(stream, filtered_row)
+            singer.write_state({})
+
+
+def gen_singer_header_from_polars_schema(
+    schema: pl.Schema
+) -> dict:
+    """
+    Generate Singer headers from a Polars schema.
+
+    Parameters
+    ----------
+    schema : pl.Schema
+        Polars DataFrame schema.
+
+    Returns
+    -------
+    dict
+        Singer schema dictionary with non-primitives stringified.
+    """
+    primitive_mapping = {
+        "Float64": {"type": ["number", "null"]},
+        "Float32": {"type": ["number", "null"]},
+        "Int64": {"type": ["integer", "null"]},
+        "Int32": {"type": ["integer", "null"]},
+        "Int16": {"type": ["integer", "null"]},
+        "Int8": {"type": ["integer", "null"]},
+        "UInt64": {"type": ["integer", "null"]},
+        "UInt32": {"type": ["integer", "null"]},
+        "UInt16": {"type": ["integer", "null"]},
+        "UInt8": {"type": ["integer", "null"]},
+        "Boolean": {"type": ["boolean", "null"]},
+        "Utf8": {"type": ["string", "null"]},
+        "Date": {"type": ["string", "null"], "format": "date"},
+        "Datetime": {"type": ["string", "null"], "format": "date-time"},
+        "Time": {"type": ["string", "null"], "format": "time"},
+    }
+
+    def map_dtype(dtype) -> dict:
+        dtype_name = str(dtype)
+        # Only primitive types keep their mapping
+        if dtype_name.startswith("Struct("):
+            return {"type": ["object", "null"]}
+        
+        if dtype_name.startswith("Datetime("):
+            return {"type": ["string", "null"], "format": "date-time"}
+        
+        if dtype_name.startswith("List("):
+            return {"type": ["array", "null"], "items": {"type": ["any", "null"]}}
+        return primitive_mapping.get(dtype_name, {"type": ["string", "null"]})
+
+    header_map = {
+        "type": ["object", "null"],
+        "properties": {col: map_dtype(dtype) for col, dtype in schema.items()}
+    }
+
+    return header_map
+
+
+@to_singer.register(pl.DataFrame)
+def polars_df_to_singer(
+    df: pl.DataFrame,
+    stream,
+    output_dir,
+    keys=[],
+    filename="data.singer",
+    allow_objects=False,
+    schema=None,
+    unified_model=None,
+    keep_null_fields=False,
+    catalog_stream=None,
+    recursive_typing=True
+):
+    """Convert a polars DataFrame into a singer file.
+
+    Parameters
+    ----------
+    df: pl.DataFrame
+        Polars DataFrame to convert to singer.
+    stream: str
+        Stream name to be used in the singer output file.
+    output_dir: str
+        Path to the output directory.
+    keys: list
+        The primary-keys to be used.
+    filename: str
+        The output file name.
+    allow_objects: boolean
+        Allow or not objects to the parsed, if false defaults types to str.
+    keep_null_fields: boolean
+        Flag to keep all null fields
+    catalog_stream: str
+        Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
+        If this is not set it will use stream parameter to generate the catalog
+    recursive_typing: boolean
+        If true, the function will recursively convert arrays of objects to arrays of primitives.
+        If false, the function will fuzzy list types when generating singer header.
+    """
+
+    output = os.path.join(output_dir, filename)
+    mode = "a" if os.path.isfile(output) else "w"
+
+    header_map = gen_singer_header_from_polars_schema(df.schema)
+ 
+
+
+    with open(output, mode) as f:
+        with redirect_stdout(f):
+            singer.write_schema(stream, header_map, keys)
+            for row in df.iter_rows(named=True):
+                row = {k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(v, datetime.datetime) else v for k, v in row.items()}
+                singer.write_record(stream, row)
+
+
+            
+
+@to_singer.register(pl.LazyFrame)
+def polars_lf_to_singer(
+    df: pl.LazyFrame,
+    stream,
+    output_dir,
+    keys=[],
+    filename="data.singer",
+    allow_objects=False,
+    schema=None,
+    unified_model=None,
+    keep_null_fields=False,
+    catalog_stream=None,
+    recursive_typing=True
+):
+    """Convert a polars Lazyframe into a singer file.
+
+    Parameters
+    ----------
+    df: pd.DataFrame
+        Object to extract the types from.
+    stream: str
+        Stream name to be used in the singer output file.
+    output_dir: str
+        Path to the output directory.
+    keys: list
+        The primary-keys to be used.
+    filename: str
+        The output file name.
+    allow_objects: boolean
+        Allow or not objects to the parsed, if false defaults types to str.
+    keep_null_fields: boolean
+        Flag to keep all null fields
+    catalog_stream: str
+        Name of the stream in the catalog to be used to generate the schema if USE_CATALOG_SCHEMA is set as true
+        If this is not set it will use stream parameter to generate the catalog
+    recursive_typing: boolean
+        If true, the function will recursively convert arrays of objects to arrays of primitives.
+        If false, the function will fuzzy list types when generating singer header.
+    """
+
+    sink_fn = partial(
+        polars_df_to_singer,
+        stream=stream,
+        output_dir=output_dir,
+        keys=keys,
+        filename=filename,
+        allow_objects=allow_objects,
+        schema=schema,
+        unified_model=unified_model,
+        keep_null_fields=keep_null_fields,
+        catalog_stream=catalog_stream,
+        recursive_typing=recursive_typing,
+    )
+    df.sink_batches(sink_fn, chunk_size=1000)

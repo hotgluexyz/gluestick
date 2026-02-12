@@ -6,11 +6,16 @@ import os
 
 import pandas as pd
 import numpy as np
+import pyarrow.parquet as pq
 from datetime import datetime
 from pytz import utc
 from gluestick.singer import to_singer
 import re
 from gluestick.reader import Reader
+import polars as pl
+from gluestick.readers.pl_lazyframe_reader import PLLazyFrameReader
+from gluestick.readers.pl_reader import PolarsReader
+from functools import singledispatch
 
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
@@ -135,7 +140,9 @@ def read_parquet_folder(path, ignore=[]):
             entity_type = entity_type.rsplit("-", 1)[0]
 
         if entity_type not in results and entity_type not in ignore:
-            results[entity_type] = pd.read_parquet(file, use_nullable_dtypes=True)
+            df = pq.read_table(file, use_threads=False).to_pandas(safe=False, use_threads=False)
+            # df = df.convert_dtypes()
+            results[entity_type] = df
 
     return results
 
@@ -160,7 +167,8 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
     """
     # Read snapshot file if it exists
     if os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.parquet"):
-        snapshot = pd.read_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", use_nullable_dtypes=True, **kwargs)
+        snapshot = pq.read_table(f"{snapshot_dir}/{stream}.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
+        # snapshot = snapshot.convert_dtypes()
     elif os.path.isfile(f"{snapshot_dir}/{stream}.snapshot.csv"):
         snapshot = pd.read_csv(f"{snapshot_dir}/{stream}.snapshot.csv", **kwargs)
     else:
@@ -223,8 +231,6 @@ def snapshot_records(
                             merged_data[column] = merged_data[column].astype('boolean')
                         elif dtype in ["int64", "int32", "Int32", "Int64"]:
                             merged_data[column] = merged_data[column].astype("Int64")
-                        elif dtype == 'object':
-                            merged_data[column] = merged_data[column].astype(str)
                         else:
                             merged_data[column] = merged_data[column].astype(dtype)
                 except Exception as e:
@@ -250,7 +256,6 @@ def snapshot_records(
             stream_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
         return stream_data
 
-    # If the new data is empty return snapshot
     if just_new or overwrite:
         return stream_data
     else:
@@ -326,7 +331,7 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
     # If there is a snapshot file compare and filter the hash
     hash_df = None
     if os.path.isfile(f"{output_dir}/{name}.hash.snapshot.parquet"):
-        hash_df = pd.read_parquet(f"{output_dir}/{name}.hash.snapshot.parquet")
+        hash_df = pq.read_table(f"{output_dir}/{name}.hash.snapshot.parquet", use_threads=False).to_pandas(safe=False, use_threads=False)
     elif os.path.isfile(f"{output_dir}/{name}.hash.snapshot.csv"):
         hash_df = pd.read_csv(f"{output_dir}/{name}.hash.snapshot.csv")
 
@@ -337,8 +342,8 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
             hash_df = hash_df.drop_duplicates(subset=pk)
 
         if updated_flag and pk:
-            updated_pk = df[pk]
-            updated_pk["_updated"] = updated_pk.isin(hash_df[pk])
+            updated_pk = df[pk].merge(hash_df[pk], on=pk, how="inner")
+            updated_pk["_updated"] = True
 
         df = df.merge(
             hash_df[pk + ["hash"]], on=pk + ["hash"], how="left", indicator=True
@@ -348,6 +353,7 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
 
         if updated_flag and pk:
             df = df.merge(updated_pk, on=pk, how="left")
+            df["_updated"] = df["_updated"].fillna(False)
 
     snapshot_records(df[pk + ["hash"]], f"{name}.hash", output_dir, pk, use_csv=use_csv)
     df = df.drop("hash", axis=1)
@@ -583,7 +589,24 @@ def format_str_safely(str_to_format, **format_variables):
     return str_output
 
 
+@singledispatch
 def to_export(
+    data,
+    name, 
+    output_dir, 
+    keys=[], 
+    unified_model=None, 
+    export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"), 
+    output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"), 
+    schema=None, 
+    stringify_objects=False, 
+    reserved_variables={}
+    ):
+    raise NotImplementedError("to_export is not implemented for this dataframe type")
+
+
+@to_export.register(pd.DataFrame)
+def pandas_df_to_export(
     data,
     name,
     output_dir,
@@ -671,6 +694,157 @@ def to_export(
         data.to_csv(f"{output_dir}/{composed_name}.csv", index=False)
 
 
+@to_export.register(pl.LazyFrame)
+def polars_lf_to_export(
+    data,
+    name,
+    output_dir,
+    keys=[],
+    unified_model=None,
+    export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"),
+    output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"),
+    schema=None,
+    stringify_objects=False,
+    reserved_variables={},
+):
+    """Write a Polars LazyFrame to a specified format.
+
+    Notes
+    -----
+    This function will export the input data to a specified format
+
+    Parameters
+    ----------
+    data: Polars LazyFrame
+        Polars LazyFrame that will be transformed to a specified format.
+    name: str
+        name of the output file
+    output_dir: str
+        path of the folder that will store the output file
+    output_file_prefix: str
+        prefix of the output file name if needed
+    export_format: str
+        format to which the dataframe will be transformed
+        supported values are: singer, parquet, json and csv
+    unified_model: pydantic model
+        pydantic model used to generate the schema for export format
+        'singer'
+    schema: dict
+        customized schema used for export format 'singer'
+    stringify_objects: bool
+        for parquet files it will stringify complex structures as arrays
+        of objects
+    reserved_variables: dict
+        A dictionary of default values for the format variables to be used
+        in the output_file_prefix.
+
+    Returns
+    -------
+    return: file
+        it outputs a singer, parquet, json or csv file
+
+    """
+    if output_file_prefix:
+        # format output_file_prefix with env variables
+        format_variables = build_string_format_variables(
+            default_kwargs=reserved_variables
+        )
+        output_file_prefix = format_str_safely(output_file_prefix, **format_variables)
+        composed_name = f"{output_file_prefix}{name}"
+    else:
+        composed_name = name
+
+    if export_format == "singer":
+        # get pk
+        reader = PLLazyFrameReader()
+        keys = keys or reader.get_pk(name)
+        # export data as singer
+        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+    elif export_format == "parquet":
+        data.sink_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
+    elif export_format == "csv":
+        data.sink_csv(os.path.join(output_dir, f"{composed_name}.csv"))
+    else:
+        raise ValueError(f"Unsupported export format: {export_format}")
+
+
+@to_export.register(pl.DataFrame)
+def polars_df_to_export(
+    data,
+    name,
+    output_dir,
+    keys=[],
+    unified_model=None,
+    export_format=os.environ.get("DEFAULT_EXPORT_FORMAT", "singer"),
+    output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"),
+    schema=None,
+    stringify_objects=False,
+    reserved_variables={},
+):
+    """Write a Polars DataFrame to a specified format.
+
+    Notes
+    -----
+    This function will export the input data to a specified format
+
+    Parameters
+    ----------
+    data: Polars DataFrame
+        Polars DataFrame that will be transformed to a specified format.
+    name: str
+        name of the output file
+    output_dir: str
+        path of the folder that will store the output file
+    output_file_prefix: str
+        prefix of the output file name if needed
+    export_format: str
+        format to which the dataframe will be transformed
+        supported values are: singer, parquet, json and csv
+    unified_model: pydantic model
+        pydantic model used to generate the schema for export format
+        'singer'
+    schema: dict
+        customized schema used for export format 'singer'
+    stringify_objects: bool
+        Unused for polars parquet; kept for signature compatibility
+    reserved_variables: dict
+        A dictionary of default values for the format variables to be used
+        in the output_file_prefix.
+
+    Returns
+    -------
+    return: file
+        it outputs a singer, parquet, csv, json or jsonl file
+
+    """
+    if output_file_prefix:
+        # format output_file_prefix with env variables
+        format_variables = build_string_format_variables(
+            default_kwargs=reserved_variables
+        )
+        output_file_prefix = format_str_safely(output_file_prefix, **format_variables)
+        composed_name = f"{output_file_prefix}{name}"
+    else:
+        composed_name = name
+
+    if export_format == "singer":
+        # get pk
+        reader = PolarsReader()
+        keys = keys or reader.get_pk(name)
+        # export data as singer
+        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+    elif export_format == "parquet":
+        data.write_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
+    elif export_format == "csv":
+        data.write_csv(os.path.join(output_dir, f"{composed_name}.csv"))
+    elif export_format == "json":
+        data.write_json(os.path.join(output_dir, f"{composed_name}.json"))
+    elif export_format == "jsonl":
+        data.write_ndjson(os.path.join(output_dir, f"{composed_name}.jsonl"))
+    else:
+        raise ValueError(f"Unsupported export format: {export_format}")
+
+
 def localize_datetime(df, column_name):
     """
     Localize a Pandas DataFrame column to a specific timezone.
@@ -711,3 +885,118 @@ def exception(exception, root_dir, error_message=None):
     with open(f"{root_dir}/errors.txt", "w") as outfile:
         outfile.write(error)
     raise Exception(error)
+
+def merge_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk):
+    """
+    Merges DataFrame with target created snapshot to retrieve existing target ids.
+    
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The DataFrame to be modified.
+    snapshot_dir : str
+        The path of the snapshot directory.
+    stream : str
+        The name of the stream.
+    flow_id : str
+        The id of the flow used to create the snapshot.
+    pk : str
+        The name of the primary key column to output.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The DataFrame with the primary key column added.
+    """
+
+    # if no pk, set it to None and return
+    if not pk:
+        raise Exception(f"No PK found for '{stream}'. Cannot merge.")
+
+    # if no externalId, raise an error
+    if "externalId" not in df.columns:
+        raise Exception(f"'externalId' missing for '{stream}'. Cannot merge.")
+    
+    # read snapshot
+    prefix = f"{stream}_{flow_id}"
+    print(f"Reading snapshot: '{prefix}'")
+    snapshot_data_frame = read_snapshots(prefix, snapshot_dir)
+
+    # if no snapshot, return dataframe
+    if snapshot_data_frame is None or snapshot_data_frame.empty:
+        print(f"No snapshot for '{prefix}'.")
+        return df
+
+    # get ids from snapshot
+    ids = snapshot_data_frame[["InputId", "RemoteId"]].drop_duplicates(
+        subset=["InputId"], keep="last"
+    )
+
+    # merge dataframe with snapshot
+    merged = df.merge(
+        ids,
+        left_on="externalId",
+        right_on="InputId",
+        how="left",
+        suffixes=("", "_snap"),
+    )
+
+    # rename RemoteId to pk
+    if "RemoteId" in merged.columns:
+        merged = merged.rename(columns={"RemoteId": pk})
+
+    # drop InputId (not needed)
+    if "InputId" in merged.columns:
+        merged = merged.drop(columns=["InputId"])
+
+    # set pk to None if not in snapshot
+    if pk in merged.columns:
+        merged[pk] = merged[pk].where(pd.notna(merged[pk]), None)
+    print(f"Finished getting ids from snapshot for '{stream}'.")
+    return merged
+
+def read_tenant_custom_mapping(tenant_config, flow_id=None):
+    """Read the tenant mapping from the tenant config.
+
+    Parameters
+    ----------
+    tenant_config : dict
+        The tenant config.
+    """
+    # read mapping from tenant config
+    raw_mapping_data = tenant_config.get("hotglue_mapping", {}).get("mapping", {})
+    if not raw_mapping_data:
+        print("No 'hotglue_mapping.mapping' section found in tenant config.")
+        return {}, {}
+
+    custom_field_mappings = {}
+    stream_name_mapping = {}
+
+    # get flow_id from tenant config
+    potential_flow_id_key = (
+        list(raw_mapping_data.keys())[0]
+        if len(raw_mapping_data) == 1
+        else None
+    )
+
+    flow_id = flow_id or potential_flow_id_key
+    raw_mapping_data = raw_mapping_data.get(flow_id)
+
+    if not raw_mapping_data:
+        print(f"No mapping found for flow_id: {flow_id}")
+        return custom_field_mappings, stream_name_mapping
+    
+    if not isinstance(raw_mapping_data, dict):
+        print(f"Unexpected structure in mapping content: Expected dict, got {type(raw_mapping_data)}")
+        raise ValueError("Invalid mapping structure.")
+
+    # process mapping
+    for combined_stream_name, field_map in raw_mapping_data.items():
+        try:
+            # Key format is SourceStream/TargetStream
+            source_stream, target_stream = combined_stream_name.split("/", 1)
+            custom_field_mappings[source_stream] = field_map
+            stream_name_mapping[source_stream] = target_stream
+        except Exception as e:
+            raise Exception(f"Error processing mapping key '{combined_stream_name}': {e}. Skipping.")
+    return custom_field_mappings, stream_name_mapping
