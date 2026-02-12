@@ -430,8 +430,7 @@ def pandas_df_to_singer(
                 else:
                     filtered_row = row.where(pd.notna(row), None)
 
-                # trim nested null fields
-                if trim_nested_nulls:
+                if trim_nested_nulls and not (catalog_schema or include_all_unified_fields or keep_null_fields):
                     filtered_row = remove_nulls_deep(filtered_row)
                 else:      
                     filtered_row = filtered_row.to_dict()
