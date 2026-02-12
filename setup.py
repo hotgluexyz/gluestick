@@ -16,7 +16,7 @@ setup(
         "pandas>=1.2.5",
         "pyarrow>=8.0.0",
         "pytz>=2022.6",
-        "polars==1.34.0"
+        "polars==1.34.0",
         "pydantic==2.5.3"
     ],
     author="hotglue",

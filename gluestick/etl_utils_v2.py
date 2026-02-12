@@ -9,11 +9,13 @@ from pydantic import ValidationError
 from contextlib import suppress
 import traceback
 
+__all__ = ["CustomValidationError", "Utils"]
+
 logger = logging.getLogger('Utils')
 
 logger.info('Pandas Version: ' + pd.__version__)
 
-class CustomValidationError(BaseException):
+class CustomValidationError(Exception):
     def __init__(self, error):
         super().__init__(error)
         self.error = error
@@ -21,7 +23,7 @@ class CustomValidationError(BaseException):
 class Utils:
 
     @staticmethod
-    def establish_directories(global_vars, additional_params=[], clear = True):
+    def establish_directories(global_vars):
 
         def get_var(var_name, default_value):
             return os.getenv(var_name, global_vars.get(var_name, default_value))
@@ -55,7 +57,6 @@ class Utils:
         with suppress(FileExistsError):
             os.makedirs(parameters["tmp_dir"])
 
-        # Establis config.json path.
         config_json = parameters["config_json"]
 
         if not os.path.exists(config_json):
@@ -457,9 +458,9 @@ class Utils:
                 elif isinstance(value, pd.Timestamp):
                     row[field] = value.tz_localize(timezone) if value.tzinfo is None else value
                 elif isinstance(value, datetime.datetime):
-                    row[field] = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+                    row[field] = value.replace(tzinfo=datetime.timezone.utc) if value.tzinfo is None else value
                 elif isinstance(value, datetime.date):
-                    row[field] = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+                    row[field] = value.replace(tzinfo=datetime.timezone.utc) if value.tzinfo is None else value
         return row
     
     @staticmethod
@@ -508,6 +509,5 @@ class Utils:
     def read_data(stream, reader):
         data = reader.get(stream, catalog_types=True)
         if data is not None:
-            # clean nas
             data = data.replace({pd.NA: None})
         return data
