@@ -4,9 +4,9 @@ from gluestick.utils.exceptions import CustomValidationError
 import traceback
 from gluestick.etl_utils import localize_datetime
 
-__all__ = ["validate_model"]
+__all__ = ["validate_model", "handle_validation_error"]
 
-def _handle_error(error_message, file_path='error_log.txt', raise_error=False):
+def handle_validation_error(error_message, file_path='error_log.txt', raise_error=True):
         """
         Logs the error message to a file with a timestamp.
 
@@ -21,7 +21,7 @@ def _handle_error(error_message, file_path='error_log.txt', raise_error=False):
             f.write(f"ERROR: {error_message}\n")
             f.write(f"TRACEBACK:\n{traceback.format_exc()}\n\n")
 
-def validate_model(list, model, config, raise_error=False):
+def validate_model(list, model, config, raise_error=True):
     """Validate and cast a list of dictionaries against a Pydantic model.
 
     Each dictionary in *list* is localized for datetime fields (using the
@@ -66,8 +66,8 @@ def validate_model(list, model, config, raise_error=False):
                 expected_type = error["type"]
                 invalid_value = error["input"]
                 error_message = f"Field '{field_name}' in model {model.schema_name} failed to be casted as '{expected_type}', value trying to be casted: '{invalid_value}'"
-                _handle_error(error_message, raise_error=raise_error)
+                handle_validation_error(error_message, raise_error=raise_error)
             continue
         except CustomValidationError as e:
-            _handle_error(e.error, raise_error=raise_error)
+            handle_validation_error(e.error, raise_error=raise_error)
     return output_list
