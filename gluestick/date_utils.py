@@ -56,8 +56,10 @@ def localize_datetime(data, column_names, timezone="UTC"):
           converted to *timezone*.
         - **pd.Timestamp**: localized with ``tz_localize`` if naive, left
           as-is otherwise.
-        - **datetime.datetime / datetime.date**: naive values get UTC
-          attached via ``replace(tzinfo=...)``.
+        - **datetime.datetime**: naive values get UTC attached via
+          ``replace(tzinfo=...)``.
+        - **datetime.date**: promoted to ``datetime.datetime`` at midnight
+          with UTC timezone.
 
         Returns the mutated *data* dict.
 
@@ -109,5 +111,6 @@ def localize_datetime(data, column_names, timezone="UTC"):
                 elif isinstance(value, datetime.datetime):
                     data[field] = value.replace(tzinfo=datetime.timezone.utc) if value.tzinfo is None else value
                 elif isinstance(value, datetime.date):
-                    data[field] = value.replace(tzinfo=datetime.timezone.utc) if value.tzinfo is None else value
+                    # datetime.date has no tzinfo; promote to datetime at midnight with UTC
+                    data[field] = datetime.datetime(value.year, value.month, value.day, tzinfo=datetime.timezone.utc)
         return data

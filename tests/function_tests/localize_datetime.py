@@ -173,26 +173,20 @@ def test_dict_aware_datetime_is_unchanged():
 # Dict mode - datetime.date values
 # -------------------------------------------------------------------
 
-def test_dict_naive_date_raises_attribute_error():
-    """Naive datetime.date hits a bug — datetime.date has no tzinfo attribute.
-
-    Known issue: the datetime.date branch in localize_datetime tries to
-    access ``value.tzinfo``, but ``datetime.date`` objects do not have that
-    attribute (only ``datetime.datetime`` does).
-    """
+def test_dict_naive_date_is_promoted_to_datetime_with_utc():
+    """Naive datetime.date is promoted to datetime.datetime at midnight UTC."""
     print("=====")
-    print("test_dict_naive_date_raises_attribute_error")
+    print("test_dict_naive_date_is_promoted_to_datetime_with_utc")
 
     d = datetime.date(2024, 6, 15)
     row = {"event_date": d}
-    raised = False
-    try:
-        localize_datetime(row, ["event_date"])
-    except AttributeError:
-        raised = True
+    result = localize_datetime(row, ["event_date"])
 
-    assert raised, "Expected AttributeError for datetime.date (known bug)"
-    print("test_dict_naive_date_raises_attribute_error output is correct")
+    expected = datetime.datetime(2024, 6, 15, tzinfo=datetime.timezone.utc)
+    assert result["event_date"] == expected
+    assert isinstance(result["event_date"], datetime.datetime)
+    assert result["event_date"].tzinfo == datetime.timezone.utc
+    print("test_dict_naive_date_is_promoted_to_datetime_with_utc output is correct")
 
 
 # -------------------------------------------------------------------
