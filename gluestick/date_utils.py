@@ -37,14 +37,45 @@ def get_model_datetime_fields(model):
     return datetime_fields
 
 def localize_datetime(data, column_names, timezone="UTC"):
-    """
-    Localize a Pandas DataFrame column to a specific timezone.
-    Parameters:
-    -----------
-    data : pandas.DataFrame or pandas.Row
-        The DataFrame to be modified.
-    column_name : str
-        The name of the column to be localized.
+    """Ensure datetime values carry timezone information.
+
+    This function operates in two modes depending on the input types:
+
+    **DataFrame mode** (``data`` is a ``pd.DataFrame`` and ``column_names``
+    is a single ``str``):
+        Converts the specified column to datetime, then localizes naive
+        timestamps to UTC or converts timezone-aware timestamps to UTC.
+        Returns the modified column (``pd.Series``).
+
+    **Dict / row mode** (``data`` is a ``dict`` and ``column_names`` is a
+    list of field names):
+        Iterates over each field and localizes its value in-place based on
+        its type:
+
+        - **str**: parsed with ``pd.to_datetime``, then localized or
+          converted to *timezone*.
+        - **pd.Timestamp**: localized with ``tz_localize`` if naive, left
+          as-is otherwise.
+        - **datetime.datetime / datetime.date**: naive values get UTC
+          attached via ``replace(tzinfo=...)``.
+
+        Returns the mutated *data* dict.
+
+    Args:
+        data (pd.DataFrame or dict): The data to modify - either a full
+            DataFrame or a single record as a dictionary.
+        column_names (str or list[str]): A single column name (DataFrame
+            mode) or a list of field names (dict mode) to localize.
+        timezone (str): Target timezone identifier (default ``"UTC"``).
+            Used only in dict mode; DataFrame mode always localizes to UTC.
+
+    Returns:
+        pd.Series or dict: The localized column series (DataFrame mode) or
+        the mutated record dictionary (dict mode).
+
+    Raises:
+        CustomValidationError: If any field in dict mode contains a ``NaT``
+            value.
     """
     
     if isinstance(data, pd.DataFrame) and isinstance(column_names, str):
