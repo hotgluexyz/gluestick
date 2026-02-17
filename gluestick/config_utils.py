@@ -97,7 +97,7 @@ def establish_directories(global_vars):
 def _load_config_json_data(config_json_data, config_vars):
 
     if config_json_data is None:
-        return tuple(config_vars.values())
+        return config_vars
 
     for variable in config_vars.keys():
         if variable not in config_json_data or config_json_data[variable] == "":

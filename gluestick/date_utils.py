@@ -93,7 +93,7 @@ def localize_datetime(data, column_names, timezone="UTC"):
         return data[column_name]
     else:
         for field in column_names:
-            if data.get(field):
+            if field in data and data[field] is not None:
                 value = data[field]
                 # Check for NaT values, which are neither None nor valid timestamps
                 if value is not None and pd.isna(value):

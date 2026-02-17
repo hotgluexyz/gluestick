@@ -6,13 +6,23 @@ from gluestick.etl_utils import localize_datetime
 
 __all__ = ["validate_model", "handle_validation_error"]
 
-def handle_validation_error(error_message, file_path='error_log.txt', raise_error=True):
-        """
-        Logs the error message to a file with a timestamp.
+def handle_validation_error(error_message, file_path='error_log.txt', raise_error=False):
+        """Handle a validation error by either raising it or logging it to a file.
+
+        When *raise_error* is ``True`` the error is raised immediately as a
+        ``CustomValidationError``.  When ``False`` (the default) the error
+        message and current traceback are appended to *file_path* instead,
+        allowing the caller to continue processing.
 
         Args:
-            error_message (str): The error message to log.
-            file_path (str): The path of the file to which the error will be logged.
+            error_message (str): The error message to log or raise.
+            file_path (str): The path of the file to which the error will be
+                logged when *raise_error* is ``False``.
+            raise_error (bool): If ``True``, raise a ``CustomValidationError``
+                instead of logging.  Defaults to ``False``.
+
+        Raises:
+            CustomValidationError: If *raise_error* is ``True``.
         """
         if raise_error:
             raise CustomValidationError(error_message)
@@ -56,7 +66,7 @@ def validate_model(list, model, config, raise_error=True):
             # localize datetime fields
             timezone = config.get("timezone", "UTC")
             value = localize_datetime(value, datetime_fields, timezone)
-            # Attempt to cast to Vendor model
+            # Validate and cast to the Pydantic model
             validated_value = model(**value)
             output_list.append(validated_value)
         except ValidationError as ve:
