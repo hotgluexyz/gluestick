@@ -46,10 +46,10 @@ def validate_model(list, model, config, raise_error=True):
             Must expose ``model_fields`` and ``schema_name``.
         config (dict): Configuration dictionary. The ``"timezone"`` key is
             used for datetime localization (defaults to ``"UTC"``).
-        raise_error (bool): If ``True``, validation or datetime errors are
-            raised immediately as ``CustomValidationError``. If ``False``
-            (default), errors are written to the error log file and the
-            record is skipped.
+        raise_error (bool): If ``True`` (default), validation or datetime
+            errors are raised immediately as ``CustomValidationError``.
+            If ``False``, errors are written to the error log file and
+            the record is skipped.
 
     Returns:
         list: A list of validated Pydantic model instances for every record
@@ -63,14 +63,11 @@ def validate_model(list, model, config, raise_error=True):
     datetime_fields = get_model_datetime_fields(model)
     for value in list:
         try:
-            # localize datetime fields
             timezone = config.get("timezone", "UTC")
             value = localize_datetime(value, datetime_fields, timezone)
-            # Validate and cast to the Pydantic model
             validated_value = model(**value)
             output_list.append(validated_value)
         except ValidationError as ve:
-            # Catch validation errors and log the failed fields
             for error in ve.errors():
                 field_name = error["loc"][0]
                 expected_type = error["type"]

@@ -152,7 +152,8 @@ def test_dict_naive_datetime_gets_utc():
     row = {"event_time": dt}
     result = localize_datetime(row, ["event_time"])
 
-    assert result["event_time"].tzinfo == datetime.timezone.utc
+    assert result["event_time"].tzinfo is not None
+    assert str(result["event_time"].tzinfo) == "UTC"
     print("test_dict_naive_datetime_gets_utc output is correct")
 
 
@@ -182,10 +183,13 @@ def test_dict_naive_date_is_promoted_to_datetime_with_utc():
     row = {"event_date": d}
     result = localize_datetime(row, ["event_date"])
 
-    expected = datetime.datetime(2024, 6, 15, tzinfo=datetime.timezone.utc)
-    assert result["event_date"] == expected
     assert isinstance(result["event_date"], datetime.datetime)
-    assert result["event_date"].tzinfo == datetime.timezone.utc
+    assert result["event_date"].year == 2024
+    assert result["event_date"].month == 6
+    assert result["event_date"].day == 15
+    assert result["event_date"].hour == 0
+    assert result["event_date"].tzinfo is not None
+    assert str(result["event_date"].tzinfo) == "UTC"
     print("test_dict_naive_date_is_promoted_to_datetime_with_utc output is correct")
 
 
