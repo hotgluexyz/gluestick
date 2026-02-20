@@ -25,4 +25,4 @@ jobs:
         run: pip install tox
 
       - name: Run lint
-        run: tox
+        run: tox -e ruff

@@ -11,7 +11,8 @@ import singer
 from gluestick.reader import Reader
 import polars as pl
 
-def _check_null(x):
+def _serialize_value(x):
+    """Serialize value for Singer: JSON for list/dict, string for non-null scalars, pass null through."""
     if isinstance(x, (list, dict)):
         return json.dumps(x, default=str)
     if not pd.isna(x):
@@ -100,7 +101,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
                 header_map["properties"][col] = type_mapping["str"]
         else:
             header_map["properties"][col] = type_mapping["str"]
-            df[col] = df[col].apply(_check_null)
+            df[col] = df[col].apply(_serialize_value)
 
     # update schema using types from catalog and keeping extra columns not defined in catalog
     # i.e. tenant, sync_date, etc
