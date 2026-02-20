@@ -1,0 +1,19 @@
+target-version = "py38"
+line-length = 100
+
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    ".secrets",
+    ".vscode"
+]
+
+[lint]
+extend-select = ["C901"]
+ignore = ["E722", "E721"]
+[lint.mccabe]
+max-complexity = 17

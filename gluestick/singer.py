@@ -11,6 +11,14 @@ import singer
 from gluestick.reader import Reader
 import polars as pl
 
+def _check_null(x):
+    if isinstance(x, (list, dict)):
+        return json.dumps(x, default=str)
+    if not pd.isna(x):
+        return str(x)
+    return x
+
+
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
     """Generate singer headers based on pandas types.
 
@@ -92,15 +100,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
                 header_map["properties"][col] = type_mapping["str"]
         else:
             header_map["properties"][col] = type_mapping["str"]
-
-            def check_null(x):
-                if isinstance(x, list) or isinstance(x, dict):
-                    return json.dumps(x, default=str)
-                elif not pd.isna(x):
-                    return str(x)
-                return x
-
-            df[col] = df[col].apply(check_null)
+            df[col] = df[col].apply(_check_null)
 
     # update schema using types from catalog and keeping extra columns not defined in catalog
     # i.e. tenant, sync_date, etc
@@ -142,28 +142,27 @@ def to_singer_schema(input):
         return {"type": ["number", "null"]}
     return {"type": ["string", "null"]}
 
+def _resolve_refs(schema, defs):
+    if isinstance(schema, dict):
+        if '$ref' in schema:
+            ref_path = schema['$ref'].split('/')
+            ref_name = ref_path[-1]
+            return _resolve_refs(defs[ref_name], defs)
+        else:
+            resolved_schema = {}
+            for k,v in schema.items():
+                if type(v) != list and type(v) != dict:
+                    if k not in ['required', 'title']:
+                        resolved_schema[k] = v
+                else:
+                    resolved_schema[k] = _resolve_refs(v, defs)
+            return resolved_schema
+    elif isinstance(schema, list):
+        return [_resolve_refs(item, defs) for item in schema]
+    else:
+        return schema
 
 def unwrap_json_schema(schema):
-    def resolve_refs(schema, defs):
-        if isinstance(schema, dict):
-            if '$ref' in schema:
-                ref_path = schema['$ref'].split('/')
-                ref_name = ref_path[-1]
-                return resolve_refs(defs[ref_name], defs)
-            else:
-                resolved_schema = {}
-                for k,v in schema.items():
-                    if type(v) != list and type(v) != dict:
-                        if k not in ['required', 'title']:
-                            resolved_schema[k] = v
-                    else:
-                        resolved_schema[k] = resolve_refs(v, defs)
-                return resolved_schema
-        elif isinstance(schema, list):
-            return [resolve_refs(item, defs) for item in schema]
-        else:
-            return schema
-
     def simplify_anyof(schema):
         if isinstance(schema, dict):
             if 'anyOf' in schema:
@@ -195,7 +194,7 @@ def unwrap_json_schema(schema):
             return schema
 
     defs = schema.get('$defs', {})
-    resolved_schema = resolve_refs(schema, defs)
+    resolved_schema = _resolve_refs(schema, defs)
     simplified_schema = simplify_anyof(resolved_schema)
     simplified_schema.pop("$defs", None)
     return simplified_schema
