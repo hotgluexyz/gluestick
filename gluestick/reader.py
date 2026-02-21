@@ -192,7 +192,7 @@ class Reader:
         if os.path.isfile(file_name):
             with open(file_name) as f:
                 catalog = json.load(f)
-            print(f"Finished loading source catalog.")
+            print("Finished loading source catalog.")
         else:
             print(f"Source catalog not found at {file_name}.")
             catalog = None
