@@ -254,6 +254,17 @@ def parse_objs(x):
     except:
         return json.loads(x)
 
+def combine_anyof_types(field_types):
+    types = set()
+    for item in field_types:
+        if 'type' in item:
+            if isinstance(item['type'], list):
+                types.union(set(item['type']))
+            elif isinstance(item['type'], str):
+                types.add(item['type'])
+            else:
+                raise ValueError(f"Invalid type: {item['type']}")
+    return list(types)
 
 def get_catalog_schema(stream):
     """Get a df schema using the catalog.
@@ -277,6 +288,16 @@ def get_catalog_schema(stream):
         # need to ensure every array type has an items dict or we'll have issues
         for p in schema.get("properties", dict()):
             prop = schema["properties"][p]
+            col_type = prop.get("type")
+            if prop.get("anyOf"):
+                # give priority to type with format   
+                col_type = next((col_t for col_t in prop.get("anyOf", []) if "format" in col_t), None)
+                # if no type with format, get combined values of all types
+                if not col_type:
+                    col_type = combine_anyof_types(prop.get("anyOf", []))
+                prop.update(col_type)
+                prop.pop("anyOf", None)
+                
             if prop.get("type") == "array" or "array" in prop.get("type") and prop.get("items") is None:
                 prop["items"] = dict()
     return schema
