@@ -184,7 +184,7 @@ def unwrap_json_schema(schema):
                 resolved_schema = {}
                 for k,v in schema.items():
                     if type(v) != list and type(v) != dict:
-                        if k not in ['required,' 'title']:
+                        if k not in ['required', 'title']:
                             resolved_schema[k] = v
                     else:
                         resolved_schema[k] = simplify_anyof(v)
