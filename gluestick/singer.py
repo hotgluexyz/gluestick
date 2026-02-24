@@ -259,7 +259,7 @@ def combine_anyof_types(field_types):
     for item in field_types:
         if 'type' in item:
             if isinstance(item['type'], list):
-                types.union(set(item['type']))
+                types.update(set(item['type']))
             elif isinstance(item['type'], str):
                 types.add(item['type'])
             else:
@@ -294,7 +294,8 @@ def get_catalog_schema(stream):
                 col_type = next((col_t for col_t in prop.get("anyOf", []) if "format" in col_t), None)
                 # if no type with format, get combined values of all types
                 if not col_type:
-                    col_type = combine_anyof_types(prop.get("anyOf", []))
+                    combined_types = combine_anyof_types(prop.get("anyOf", []))
+                    col_type = {"type": combined_types}
                 prop.update(col_type)
                 prop.pop("anyOf", None)
                 
