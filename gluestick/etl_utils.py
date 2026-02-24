@@ -9,7 +9,6 @@ import pandas as pd
 import numpy as np
 import pyarrow.parquet as pq
 from datetime import datetime
-from pytz import utc
 from gluestick.singer import to_singer
 import re
 from gluestick.reader import Reader
@@ -176,6 +175,12 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
         snapshot = None
     return snapshot
 
+def _write_snapshot_file(data, stream, snapshot_dir, use_csv=False):
+    if use_csv:
+        data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
+    else:
+        data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
+    return data
 
 def snapshot_records(
     stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, overwrite=False, **kwargs
@@ -235,15 +240,11 @@ def snapshot_records(
                         else:
                             merged_data[column] = merged_data[column].astype(dtype)
                 except Exception as e:
-                    raise Exception(f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}")
+                    raise Exception(f"Snapshot failed while trying to convert field {column} from type {snapshot_types.get(column)} to type {dtype}. Error: {e}")
         # drop duplicates
         merged_data = merged_data.drop_duplicates(pk, keep="last")
         # export data
-        if use_csv:
-            merged_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
-        else:
-            merged_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
-
+        _write_snapshot_file(merged_data, stream, snapshot_dir, use_csv)
         if not just_new:
             return merged_data
         else:
@@ -251,10 +252,7 @@ def snapshot_records(
 
     # If there is no snapshot file snapshots and return the new data
     if stream_data is not None:
-        if use_csv:
-            stream_data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
-        else:
-            stream_data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
+        _write_snapshot_file(stream_data, stream, snapshot_dir, use_csv)
         return stream_data
 
     if just_new or overwrite:
