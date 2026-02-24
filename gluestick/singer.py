@@ -264,7 +264,7 @@ def combine_anyof_types(field_types):
                 types.add(item['type'])
             else:
                 raise ValueError(f"Invalid type: {item['type']}")
-    return list(types)
+    return sorted(types)
 
 def get_catalog_schema(stream):
     """Get a df schema using the catalog.
