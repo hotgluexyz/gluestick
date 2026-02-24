@@ -184,7 +184,7 @@ def unwrap_json_schema(schema):
                 resolved_schema = {}
                 for k,v in schema.items():
                     if type(v) != list and type(v) != dict:
-                        if k not in ['required,' 'title']:
+                        if k not in ['required', 'title']:
                             resolved_schema[k] = v
                     else:
                         resolved_schema[k] = simplify_anyof(v)
@@ -254,6 +254,17 @@ def parse_objs(x):
     except:
         return json.loads(x)
 
+def combine_anyof_types(field_types):
+    types = set()
+    for item in field_types:
+        if 'type' in item:
+            if isinstance(item['type'], list):
+                types.update(set(item['type']))
+            elif isinstance(item['type'], str):
+                types.add(item['type'])
+            else:
+                raise ValueError(f"Invalid type: {item['type']}")
+    return sorted(types)
 
 def get_catalog_schema(stream):
     """Get a df schema using the catalog.
@@ -277,6 +288,17 @@ def get_catalog_schema(stream):
         # need to ensure every array type has an items dict or we'll have issues
         for p in schema.get("properties", dict()):
             prop = schema["properties"][p]
+            col_type = prop.get("type")
+            if prop.get("anyOf"):
+                # give priority to type with format   
+                col_type = next((col_t for col_t in prop.get("anyOf", []) if "format" in col_t), None)
+                # if no type with format, get combined values of all types
+                if not col_type:
+                    combined_types = combine_anyof_types(prop.get("anyOf", []))
+                    col_type = {"type": combined_types}
+                prop.update(col_type)
+                prop.pop("anyOf", None)
+                
             if prop.get("type") == "array" or "array" in prop.get("type") and prop.get("items") is None:
                 prop["items"] = dict()
     return schema
