@@ -35,6 +35,26 @@ class Reader:
     def __repr__(self):
         return str(list(self.input_files.keys()))
 
+
+    def decode_utf16_string(self, s):
+        if isinstance(s, str) and '\x00' in s:
+            # Check if it's UTF-16 encoded
+            try:
+                # Step 1: Convert escaped string to bytes using latin1
+                byte_data = s.encode('latin1')
+                
+                # Step 2: Ensure byte length is even (UTF-16 requires it)
+                if len(byte_data) % 2 != 0:
+                    byte_data += b'\x00'  # Append null byte to make length even
+
+                # Step 3: Try to decode as UTF-16
+                return byte_data.decode('utf-16')
+            except:
+                # If decoding fails, return the original string
+                return s
+        return s
+
+
     def read_parquet_with_chunks(self, filepath, chunksize):
         parquet_file = pq.ParquetFile(filepath)
 
@@ -42,6 +62,7 @@ class Reader:
             df = batch.to_pandas(safe=False)
             # TODO: add support for catalog types
             yield df
+
 
     def get(self, stream, default=None, catalog_types=False, **kwargs):
         """Read the selected file."""
@@ -93,13 +114,18 @@ class Reader:
                     # NOTE: silencing errors to avoid breaking existing workflow
                     print(f"Failed to parse catalog_types for {stream}. Ignoring.")
                     pass
-
-            return pq.read_table(filepath).to_pandas(safe=False)
+            
+            df = pq.read_table(filepath).to_pandas(safe=False)
+            # Decode UTF-16 strings in the DataFrame
+            return df.applymap(self.decode_utf16_string)
         catalog = self.read_catalog()
         if catalog and catalog_types:
             types_params = self.get_types_from_catalog(catalog, stream)
             kwargs.update(types_params)
         df = pd.read_csv(filepath, **kwargs)
+
+        # Decode UTF-16 strings in the DataFrame
+        df = df.applymap(self.decode_utf16_string)
 
         # needed to handle chunked CSVs properly
         if isinstance(df, TextFileReader):
