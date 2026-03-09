@@ -182,14 +182,11 @@ def _write_snapshot_file(data, stream, snapshot_dir, use_csv=False):
     else:
         canonical_path = f"{snapshot_dir}/{stream}.snapshot.parquet"
     lock_path = prepare_snapshot_write(canonical_path)
-    try:
-        if use_csv:
-            data.to_csv(lock_path, index=False)
-        else:
-            data.to_parquet(lock_path, index=False)
-        finish_snapshot_write(lock_path, canonical_path)
-    except Exception:
-        raise
+    if use_csv:
+        data.to_csv(lock_path, index=False)
+    else:
+        data.to_parquet(lock_path, index=False)
+    finish_snapshot_write(lock_path, canonical_path)
     return data
 
 def snapshot_records(

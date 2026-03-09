@@ -156,15 +156,11 @@ class PLLazyFrameReader(Reader):
             else:
                 canonical_path = f"{snapshot_dir}/{stream}.snapshot.parquet"
             lock_path = prepare_snapshot_write(canonical_path)
-            try:
-                if use_csv:
-                    stream_data.sink_csv(lock_path)
-                else:
-                    stream_data.sink_parquet(lock_path)
-                finish_snapshot_write(lock_path, canonical_path)
-            except Exception:
-                raise
-
+            if use_csv:
+                stream_data.sink_csv(lock_path)
+            else:
+                stream_data.sink_parquet(lock_path)
+            finish_snapshot_write(lock_path, canonical_path)
             return stream_data
         elif snapshot_lf is not None:
             return snapshot_lf
