@@ -84,6 +84,18 @@ class PolarsReader(Reader):
             return pl.read_csv(source=f"{snapshot_dir}/{stream}.snapshot.csv", **kwargs)
         else:
             return None
+    
+    def _write_snapshot_file(self, data, stream, snapshot_dir, use_csv=False):
+        if use_csv:
+            canonical_path = f"{snapshot_dir}/{stream}.snapshot.csv"
+        else:
+            canonical_path = f"{snapshot_dir}/{stream}.snapshot.parquet"
+        lock_path = prepare_snapshot_write(canonical_path)
+        if use_csv:
+            data.write_csv(lock_path)
+        else:
+            data.write_parquet(lock_path)
+        finish_snapshot_write(lock_path, canonical_path)
 
     def snapshot_records(
         self,
@@ -135,39 +147,14 @@ class PolarsReader(Reader):
 
 
             merged_df = pl.concat(items=[snapshot_df, stream_data], how="diagonal_relaxed")
-
-            if use_csv:
-                canonical_path = f"{snapshot_dir}/{stream}.snapshot.csv"
-            else:
-                canonical_path = f"{snapshot_dir}/{stream}.snapshot.parquet"
-            lock_path = prepare_snapshot_write(canonical_path)
-            try:
-                if use_csv:
-                    merged_df.write_csv(lock_path)
-                else:
-                    merged_df.write_parquet(lock_path)
-                finish_snapshot_write(lock_path, canonical_path)
-            except Exception:
-                raise
+            self._write_snapshot_file(merged_df, stream, snapshot_dir, use_csv)
 
             if just_new:
                 return stream_data
             else:
                 return merged_df
         elif stream_data is not None:
-            if use_csv:
-                canonical_path = f"{snapshot_dir}/{stream}.snapshot.csv"
-            else:
-                canonical_path = f"{snapshot_dir}/{stream}.snapshot.parquet"
-            lock_path = prepare_snapshot_write(canonical_path)
-            try:
-                if use_csv:
-                    stream_data.write_csv(lock_path)
-                else:
-                    stream_data.write_parquet(lock_path)
-                finish_snapshot_write(lock_path, canonical_path)
-            except Exception:
-                raise
+            self._write_snapshot_file(stream_data, stream, snapshot_dir, use_csv)
 
             return stream_data
         elif snapshot_df is not None:
