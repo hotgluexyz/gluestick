@@ -17,6 +17,7 @@ from gluestick.readers.pl_lazyframe_reader import PLLazyFrameReader
 from gluestick.readers.pl_reader import PolarsReader
 from functools import singledispatch
 from gluestick.date_utils import localize_datetime
+from gluestick.snapshot_lock import prepare_snapshot_write, finish_snapshot_write
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
     """Read a set of CSV files in a folder using read_csv().
@@ -177,9 +178,18 @@ def read_snapshots(stream, snapshot_dir, **kwargs):
 
 def _write_snapshot_file(data, stream, snapshot_dir, use_csv=False):
     if use_csv:
-        data.to_csv(f"{snapshot_dir}/{stream}.snapshot.csv", index=False)
+        canonical_path = f"{snapshot_dir}/{stream}.snapshot.csv"
     else:
-        data.to_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet", index=False)
+        canonical_path = f"{snapshot_dir}/{stream}.snapshot.parquet"
+    lock_path = prepare_snapshot_write(canonical_path)
+    try:
+        if use_csv:
+            data.to_csv(lock_path, index=False)
+        else:
+            data.to_parquet(lock_path, index=False)
+        finish_snapshot_write(lock_path, canonical_path)
+    except Exception:
+        raise
     return data
 
 def snapshot_records(

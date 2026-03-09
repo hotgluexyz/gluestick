@@ -1,5 +1,6 @@
 from gluestick.reader import Reader
 from gluestick.utils.polars_utils import map_pd_type_to_polars, cast_lf_from_schema
+from gluestick.snapshot_lock import prepare_snapshot_write, finish_snapshot_write
 import pyarrow.parquet as pq
 import polars as pl
 import pandas as pd
@@ -151,9 +152,18 @@ class PLLazyFrameReader(Reader):
                 return merged_lf
         elif stream_data is not None:
             if use_csv:
-                stream_data.sink_csv(f"{snapshot_dir}/{stream}.snapshot.csv")
+                canonical_path = f"{snapshot_dir}/{stream}.snapshot.csv"
             else:
-                stream_data.sink_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet")
+                canonical_path = f"{snapshot_dir}/{stream}.snapshot.parquet"
+            lock_path = prepare_snapshot_write(canonical_path)
+            try:
+                if use_csv:
+                    stream_data.sink_csv(lock_path)
+                else:
+                    stream_data.sink_parquet(lock_path)
+                finish_snapshot_write(lock_path, canonical_path)
+            except Exception:
+                raise
 
             return stream_data
         elif snapshot_lf is not None:
