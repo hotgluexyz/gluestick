@@ -2,12 +2,12 @@
 
 Callers write to a .lock path; the canonical path only appears after an atomic
 rename. This avoids leaving the canonical file truncated if the process is killed
-mid-write. Orchestrators can ignore or delete files whose name ends with .lock.
+mid-write. Orchestrators can ignore or delete files whose name ends with .hg.partial_written.lock.
 """
 
 import os
 
-LOCK_SUFFIX = ".lock"
+LOCK_SUFFIX = ".hg.partial_written.lock"
 
 
 def prepare_snapshot_write(canonical_path: str) -> str:
@@ -21,7 +21,7 @@ def prepare_snapshot_write(canonical_path: str) -> str:
     Returns
     -------
     str
-        The path to write to (canonical_path + ".lock"). If canonical_path existed,
+        The path to write to (canonical_path + LOCK_SUFFIX). If canonical_path existed,
         it has been renamed to this path so the same inode is reused.
     """
     lock_path = canonical_path + LOCK_SUFFIX
@@ -31,16 +31,16 @@ def prepare_snapshot_write(canonical_path: str) -> str:
 
 
 def finish_snapshot_write(lock_path: str, canonical_path: str) -> None:
-    """Commit a snapshot write by renaming the .lock file to the canonical path.
+    """Commit a snapshot write by renaming the lock file to the canonical path.
 
     Call only after the write to lock_path has completed successfully.
-    On failure, do not call this so the .lock file is left for the orchestrator
+    On failure, do not call this so the lock file is left for the orchestrator
     to discard.
 
     Parameters
     ----------
     lock_path : str
-        The path that was written to (canonical_path + ".lock").
+        The path that was written to (canonical_path + LOCK_SUFFIX).
     canonical_path : str
         The final path the snapshot should have.
     """
