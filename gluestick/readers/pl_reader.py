@@ -126,11 +126,11 @@ class PolarsReader(Reader):
         snapshot_df = self.read_snapshots(stream, snapshot_dir)
         if not overwrite and stream_data is not None and snapshot_df is not None:
             
-            for key in pk:
-                new_data_pk_df = stream_data.select(key)
-                snapshot_df = snapshot_df.filter(
-                    ~pl.col(key).is_in(new_data_pk_df.get_column(key))
-                )
+            snapshot_df = snapshot_df.join(
+                stream_data.select(pk),
+                on=pk,
+                how="anti"
+            )
 
 
             merged_df = pl.concat(items=[snapshot_df, stream_data], how="diagonal_relaxed")

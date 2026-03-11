@@ -126,11 +126,11 @@ class PLLazyFrameReader(Reader):
         snapshot_lf = self.read_snapshots(stream, snapshot_dir)
         if not overwrite and stream_data is not None and snapshot_lf is not None:
             
-            for key in pk:
-                new_data_pk_lf = stream_data.select(key).collect()
-                snapshot_lf = snapshot_lf.filter(
-                ~pl.col(key).is_in(new_data_pk_lf.get_column(key))
-                )
+            snapshot_lf = snapshot_lf.join(
+                stream_data.select(pk),
+                on=pk,
+                how="anti"
+            )
 
 
             merged_lf = pl.concat(items=[snapshot_lf, stream_data],how="vertical_relaxed")
