@@ -46,7 +46,7 @@ class PLLazyFrameReader(Reader):
         if catalog_types:
             catalog = self.read_catalog()
             if catalog:
-                headers = pq.read_table(filepath).to_pandas(safe=False).columns.tolist()
+                headers = pq.read_schema(filepath).names
                 types_params = self.get_types_from_catalog(catalog, stream, headers=headers)
                 lf = pl.scan_parquet(filepath)
                 return cast_lf_from_schema(lf, types_params)
