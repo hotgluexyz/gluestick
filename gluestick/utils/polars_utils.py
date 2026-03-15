@@ -30,10 +30,27 @@ def map_pd_type_to_polars(type_name):
 
 def cast_lf_from_schema(lf: pl.LazyFrame, types_params: dict):
     return lf.with_columns([
-                    pl.col(col).cast(dtype, strict=True) for col, dtype in types_params.items()
+                    _cast_expr(col, dtype) for col, dtype in types_params.items()
             ])
 
 def cast_df_from_schema(df: pl.DataFrame, types_params: dict):
     return df.with_columns([
-                    pl.col(col).cast(dtype, strict=True) for col, dtype in types_params.items()
+                    _cast_expr(col, dtype) for col, dtype in types_params.items()
             ])
+
+
+def _cast_expr(col: str, dtype: pl.DataType):
+    if dtype == pl.Boolean:
+        # Accept common string/number boolean representations.
+        lowered = pl.col(col).cast(pl.Utf8, strict=False).str.to_lowercase()
+        return (
+            pl.when(lowered.is_in(["true", "t", "1", "yes", "y"]))
+            .then(pl.lit(True))
+            .when(lowered.is_in(["false", "f", "0", "no", "n"]))
+            .then(pl.lit(False))
+            .otherwise(None)
+            .cast(pl.Boolean)
+            .alias(col)
+        )
+
+    return pl.col(col).cast(dtype, strict=True)
