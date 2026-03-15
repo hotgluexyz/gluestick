@@ -41,10 +41,15 @@ def cast_df_from_schema(df: pl.DataFrame, types_params: dict):
 
 def _cast_expr(col: str, dtype: pl.DataType):
     if dtype == pl.Boolean:
-        # Accept common string/number boolean representations.
-        lowered = pl.col(col).cast(pl.Utf8, strict=False).str.to_lowercase()
+        # Handle numeric values first (non-zero → True, zero → False),
+        # then accept common string boolean representations.
+        col_expr = pl.col(col)
+        numeric = col_expr.cast(pl.Float64, strict=False)
+        lowered = col_expr.cast(pl.Utf8, strict=False).str.to_lowercase()
         return (
-            pl.when(lowered.is_in(["true", "t", "1", "yes", "y"]))
+            pl.when(numeric.is_not_null())
+            .then(numeric != 0.0)
+            .when(lowered.is_in(["true", "t", "1", "yes", "y"]))
             .then(pl.lit(True))
             .when(lowered.is_in(["false", "f", "0", "no", "n"]))
             .then(pl.lit(False))
