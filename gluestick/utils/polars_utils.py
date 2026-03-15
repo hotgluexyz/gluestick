@@ -29,11 +29,31 @@ def map_pd_type_to_polars(type_name):
         raise ValueError(f"Unknown type: {type_name}")
 
 def cast_lf_from_schema(lf: pl.LazyFrame, types_params: dict):
+    schema = lf.collect_schema()
     return lf.with_columns([
-                    pl.col(col).cast(dtype, strict=True) for col, dtype in types_params.items()
+                    pl.col(col)
+                    if dtype == pl.Boolean and schema.get(col) == pl.Boolean
+                    else _cast_expr(col, dtype)
+                    for col, dtype in types_params.items()
             ])
 
 def cast_df_from_schema(df: pl.DataFrame, types_params: dict):
+    schema = df.schema
     return df.with_columns([
-                    pl.col(col).cast(dtype, strict=True) for col, dtype in types_params.items()
+                    pl.col(col)
+                    if dtype == pl.Boolean and schema.get(col) == pl.Boolean
+                    else _cast_expr(col, dtype)
+                    for col, dtype in types_params.items()
             ])
+
+
+def _cast_expr(col: str, dtype: pl.DataType):
+    if dtype == pl.Boolean:
+        lowered = pl.col(col).cast(pl.Utf8, strict=False).str.to_lowercase()
+        string_mapped = (
+            pl.when(lowered == "true").then(pl.lit(True))
+            .when(lowered == "false").then(pl.lit(False))
+        )
+        return string_mapped.alias(col)
+
+    return pl.col(col).cast(dtype, strict=True)
