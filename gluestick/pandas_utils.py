@@ -330,7 +330,7 @@ def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
 
     """
     drop = kwargs.get("drop", True)
-    expected_keys = kwargs.get("expected_keys", ["value", "name"])
+    expected_keys = kwargs.get("expected_keys", None)
 
     if not kwargs.get("inplace"):
         df = df.copy()
@@ -347,14 +347,17 @@ def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
     if cols:
         
         # add missing columns from expected keys to cols
-        for expected_key in expected_keys:
-            col_name = f"{expected_key}"
-            if col_name not in cols:
-                cols.append(col_name)
+        if expected_keys:
+            for expected_key in expected_keys:
+                col_name = f"{expected_key}"
+                if col_name not in cols:
+                    cols.append(col_name)
                 
         default_dict = {c: np.nan for c in cols}
         cols = [f"{column_name}.{col}" for col in cols]
     else:
+        if expected_keys is None:
+            expected_keys = ["value", "name"]
         default_dict = {c: np.nan for c in expected_keys}
         cols = [f"{column_name}.{col}" for col in expected_keys]
 
