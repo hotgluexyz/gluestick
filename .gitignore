@@ -128,3 +128,4 @@ cython_debug/
 # Misc
 .vscode
 .DS_Store
+.history
