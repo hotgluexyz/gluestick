@@ -345,6 +345,13 @@ def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
     cols = df[column_name].apply(lambda x: x.keys()).explode().unique().tolist()
     cols = [x for x in cols if x == x]
     if cols:
+        
+        # add missing columns from expected keys to cols
+        for expected_key in expected_keys:
+            col_name = f"{expected_key}"
+            if col_name not in cols:
+                cols.append(col_name)
+                
         default_dict = {c: np.nan for c in cols}
         cols = [f"{column_name}.{col}" for col in cols]
     else:
