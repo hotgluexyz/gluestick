@@ -1,5 +1,6 @@
 from gluestick.reader import Reader
 from gluestick.utils.polars_utils import map_pd_type_to_polars, cast_df_from_schema
+from gluestick.snapshot_lock import prepare_snapshot_write, finish_snapshot_write
 import pyarrow.parquet as pq
 import polars as pl
 import pandas as pd
@@ -66,6 +67,21 @@ class PolarsReader(Reader):
             for k, v in pd_types.items()
         }
         return {col: map_pd_type_to_polars(pd_type) for col, pd_type in pd_types.items()}
+
+    def _write_snapshot_file(
+        self, data: pl.DataFrame, stream: str, snapshot_dir: str, use_csv: bool = False
+    ) -> None:
+        """Write a Polars DataFrame to the snapshot file using the lock-write protocol."""
+        if use_csv:
+            canonical_path = f"{snapshot_dir}/{stream}.snapshot.csv"
+        else:
+            canonical_path = f"{snapshot_dir}/{stream}.snapshot.parquet"
+        lock_path = prepare_snapshot_write(canonical_path)
+        if use_csv:
+            data.write_csv(lock_path)
+        else:
+            data.write_parquet(lock_path)
+        finish_snapshot_write(lock_path, canonical_path)
 
     def read_snapshots(self,stream, snapshot_dir, **kwargs) -> pl.DataFrame | None:
         """Read a snapshot file and return a polars dataframe.
@@ -134,23 +150,13 @@ class PolarsReader(Reader):
 
 
             merged_df = pl.concat(items=[snapshot_df, stream_data], how="diagonal_relaxed")
-
-            if use_csv:
-                merged_df.write_csv(f"{snapshot_dir}/{stream}.snapshot.csv")
-            else:
-                merged_df.write_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet")
-            
-
+            self._write_snapshot_file(merged_df, stream, snapshot_dir, use_csv)
             if just_new:
                 return stream_data
             else:
                 return merged_df
         elif stream_data is not None:
-            if use_csv:
-                stream_data.write_csv(f"{snapshot_dir}/{stream}.snapshot.csv")
-            else:
-                stream_data.write_parquet(f"{snapshot_dir}/{stream}.snapshot.parquet")
-
+            self._write_snapshot_file(stream_data, stream, snapshot_dir, use_csv)
             return stream_data
         elif snapshot_df is not None:
             return snapshot_df
