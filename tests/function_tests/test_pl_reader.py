@@ -224,6 +224,25 @@ def test_get_types_from_catalog_missing_stream_returns_empty():
     )
     assert types == {}
 
+
+def test_get_types_from_catalog_matches_tap_stream_id():
+    catalog = {
+        "streams": [
+            {
+                "stream": "internal",
+                "tap_stream_id": "orders",
+                "schema": {
+                    "properties": {
+                        "order_id": {"type": ["integer", "null"]},
+                    },
+                },
+            }
+        ]
+    }
+    reader = PolarsReader(dir=".", root=".")
+    types = reader.get_types_from_catalog(catalog, "orders", headers=["order_id"])
+    assert types["order_id"] == pl.Int64
+
 # ---- read_snapshots() ----
 def test_read_snapshots_parquet_exists(tmp_path):
     snapshot_dir = tmp_path / "snapshots"

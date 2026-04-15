@@ -24,4 +24,10 @@ setup(
     license="MIT",
     packages=find_packages(include=["gluestick", "gluestick.*"]),
     zip_safe=False,
+    extras_require={
+        "test": [
+            "pytest>=6.0",
+            "memory-profiler>=0.61",
+        ],
+    },
 )

@@ -569,7 +569,7 @@ def to_export(
     schema=None, 
     stringify_objects=False, 
     reserved_variables={}
-    ):
+    ) -> None:
     raise NotImplementedError("to_export is not implemented for this dataframe type")
 
 
