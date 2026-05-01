@@ -35,20 +35,6 @@ def _is_null_scalar(v):
     return False
 
 
-def _json_default(o):
-    """``json.dumps`` default for values pandas/json can't serialize natively.
-
-    Converts datetimes to the same ISO format ``deep_convert_datetimes``
-    produces, so nested ``datetime``/``Timestamp`` values inside dicts/lists
-    come out correctly without a separate pre-walk.
-    """
-    if isinstance(o, (datetime.datetime, pd.Timestamp)):
-        return o.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    if isinstance(o, datetime.date):
-        return o.strftime("%Y-%m-%d")
-    return str(o)
-
-
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
     """Generate singer headers based on pandas types.
 
@@ -501,9 +487,11 @@ def pandas_df_to_singer(
 
                 if do_trim:
                     rec = remove_nulls_deep(rec)
+                    
+                rec = deep_convert_datetimes(rec)
 
                 f.write(record_prefix)
-                f.write(json.dumps(rec, default=_json_default))
+                f.write(json.dumps(rec, default=str))
                 f.write("}\n")
 
             del records

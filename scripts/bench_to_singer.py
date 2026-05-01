@@ -38,7 +38,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from gluestick.singer import (  # noqa: E402
-    pandas_df_to_singer,
     gen_singer_header,
     get_catalog_schema,
     parse_df_cols,
