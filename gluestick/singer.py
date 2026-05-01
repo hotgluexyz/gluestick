@@ -20,6 +20,35 @@ def _serialize_value(x):
     return x
 
 
+def _is_null_scalar(v):
+    """Fast null check for a single scalar from ``DataFrame.to_dict``.
+
+    Handles ``None``, float NaN, and ``pd.NaT`` without invoking ``pd.isna``
+    (which is slow per-cell and rejects collections).
+    """
+    if v is None:
+        return True
+    if isinstance(v, float) and v != v:
+        return True
+    if v is pd.NaT:
+        return True
+    return False
+
+
+def _json_default(o):
+    """``json.dumps`` default for values pandas/json can't serialize natively.
+
+    Converts datetimes to the same ISO format ``deep_convert_datetimes``
+    produces, so nested ``datetime``/``Timestamp`` values inside dicts/lists
+    come out correctly without a separate pre-walk.
+    """
+    if isinstance(o, (datetime.datetime, pd.Timestamp)):
+        return o.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    if isinstance(o, datetime.date):
+        return o.strftime("%Y-%m-%d")
+    return str(o)
+
+
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
     """Generate singer headers based on pandas types.
 
@@ -442,24 +471,45 @@ def pandas_df_to_singer(
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
 
+    keep_nulls = catalog_schema or include_all_unified_fields or keep_null_fields
+    do_trim = trim_nested_nulls and not keep_nulls
+
+    chunk_size = int(os.environ.get("SINGER_CHUNK_SIZE", "20000"))
+    record_prefix = '{"type": "RECORD", "stream": ' + json.dumps(stream) + ', "record": '
+
     with open(output, mode) as f:
-        with redirect_stdout(f):
-            singer.write_schema(stream, header_map, keys)
-            for _, row in df.iterrows():
-                # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
-                if not (catalog_schema or include_all_unified_fields or keep_null_fields):
-                    filtered_row = row.dropna()
+        # Build the SCHEMA / STATE messages via singer (so message format and
+        # any future format changes stay consistent), but write them directly
+        # to the file rather than going through redirect_stdout + flush.
+        schema_msg = singer.SchemaMessage(stream=stream, schema=header_map, key_properties=list(keys))
+        f.write(singer.format_message(schema_msg))
+        f.write("\n")
+
+        n = len(df)
+        for start in range(0, n, chunk_size):
+            chunk = df.iloc[start : start + chunk_size]
+            records = chunk.to_dict(orient="records")
+            del chunk
+
+            for rec in records:
+                if not keep_nulls:
+                    rec = {k: v for k, v in rec.items() if not _is_null_scalar(v)}
                 else:
-                    filtered_row = row.where(pd.notna(row), None)
+                    for k, v in list(rec.items()):
+                        if _is_null_scalar(v):
+                            rec[k] = None
 
-                if trim_nested_nulls and not (catalog_schema or include_all_unified_fields or keep_null_fields):
-                    filtered_row = remove_nulls_deep(filtered_row)
-                else:      
-                    filtered_row = filtered_row.to_dict()
+                if do_trim:
+                    rec = remove_nulls_deep(rec)
 
-                filtered_row = deep_convert_datetimes(filtered_row)
-                singer.write_record(stream, filtered_row)
-            singer.write_state({})
+                f.write(record_prefix)
+                f.write(json.dumps(rec, default=_json_default))
+                f.write("}\n")
+
+            del records
+
+        f.write(singer.format_message(singer.StateMessage(value={})))
+        f.write("\n")
 
 
 def gen_singer_header_from_polars_schema(

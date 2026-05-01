@@ -109,6 +109,28 @@ class TestAllowObjects:
         records = _get_records(_read_singer_lines(tmp_path / "data.singer"))
         assert isinstance(records[0]["record"]["info"], str)
 
+    def test_nested_datetime_uses_iso_format(self, tmp_path):
+        ts = pd.Timestamp("2024-05-23T20:01:07", tz="UTC")
+        df = pd.DataFrame({
+            "audit": [
+                {"new_value": ts, "old_value": ts},
+                {"new_value": ts, "old_value": ts},
+            ],
+        })
+        to_singer(df, "audits", str(tmp_path), allow_objects=True)
+        records = _get_records(_read_singer_lines(tmp_path / "data.singer"))
+        new_val = records[0]["record"]["audit"]["new_value"]
+        # ISO format like "2024-05-23T20:01:07.000000Z", not pandas str()
+        # form like "2024-05-23 20:01:07+00:00".
+        assert new_val == "2024-05-23T20:01:07.000000Z", new_val
+
+    def test_nested_datetime_in_list_uses_iso_format(self, tmp_path):
+        ts = pd.Timestamp("2024-05-23T20:01:07", tz="UTC")
+        df = pd.DataFrame({"events": [[{"at": ts}]]})
+        to_singer(df, "events", str(tmp_path), allow_objects=True)
+        records = _get_records(_read_singer_lines(tmp_path / "data.singer"))
+        assert records[0]["record"]["events"][0]["at"] == "2024-05-23T20:01:07.000000Z"
+
 
 class TestDoesNotMutateInput:
     def test_original_df_unchanged(self, tmp_path):
