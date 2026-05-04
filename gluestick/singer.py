@@ -23,14 +23,17 @@ def _serialize_value(x):
 def _is_null_scalar(v):
     """Fast null check for a single scalar from ``DataFrame.to_dict``.
 
-    Handles ``None``, float NaN, and ``pd.NaT`` without invoking ``pd.isna``
-    (which is slow per-cell and rejects collections).
+    Handles ``None``, float NaN, ``pd.NaT``, and ``pd.NA`` (the null sentinel
+    for pandas nullable extension dtypes like Int64/boolean/string) without
+    invoking ``pd.isna`` (which is slow per-cell and rejects collections).
     """
     if v is None:
         return True
     if isinstance(v, float) and v != v:
         return True
     if v is pd.NaT:
+        return True
+    if v is pd.NA:
         return True
     return False
 
