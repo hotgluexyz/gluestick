@@ -87,13 +87,13 @@ class PLLazyFrameReader(Reader):
 
     def snapshot_records(
         self,
-        stream_data,
-        stream,
-        snapshot_dir,
-        pk="id", 
-        just_new=False, 
-        use_csv=False, 
-        overwrite=False, 
+        stream_data: pl.LazyFrame,
+        stream: str,
+        snapshot_dir: str,
+        pk: str | list[str] = "id", 
+        just_new: bool = False, 
+        use_csv: bool = False, 
+        overwrite: bool = False, 
     ) -> pl.LazyFrame | None:
         """Update a snapshot file and return the merged data.
 
@@ -126,15 +126,13 @@ class PLLazyFrameReader(Reader):
 
         snapshot_lf = self.read_snapshots(stream, snapshot_dir)
         if not overwrite and stream_data is not None and snapshot_lf is not None:
-            
             snapshot_lf = snapshot_lf.join(
                 stream_data.select(pk),
                 on=pk,
                 how="anti"
             )
 
-
-            merged_lf = pl.concat(items=[snapshot_lf, stream_data],how="vertical_relaxed")
+            merged_lf = pl.concat(items=[snapshot_lf, stream_data], how="diagonal_relaxed")
 
             if use_csv:
                 merged_lf.sink_csv(f"{snapshot_dir}/{stream}.temp.snapshot.csv")
@@ -166,9 +164,3 @@ class PLLazyFrameReader(Reader):
             return snapshot_lf
         else:
             return None
-
-
-
-
-
-
