@@ -283,3 +283,69 @@ def test_snapshot_records_first_write_parquet(tmp_path):
     assert (snap_dir / "orders.snapshot.parquet").exists()
     loaded = pl.read_parquet(snap_dir / "orders.snapshot.parquet")
     assert loaded.height == 1
+
+
+# ---- snapshot_records: column-reorder fix ----
+
+def test_snapshot_records_merge_reordered_columns(tmp_path):
+    """New sync data with same columns in a different order must not raise ComputeError."""
+    snap_dir = tmp_path / "snap"
+    snap_dir.mkdir()
+    reader = PLLazyFrameReader(dir=str(tmp_path), root=str(tmp_path))
+
+    # Snapshot written with column order: id, archived, createdAt
+    snap_lf = pl.LazyFrame({"id": [1], "archived": [False], "createdAt": ["2024-01-01"]})
+    reader.snapshot_records(snap_lf, "emails", str(snap_dir))
+
+    # New sync data has the same 3 columns but in a different order: id, createdAt, archived
+    new_lf = pl.LazyFrame({"id": [2], "createdAt": ["2024-02-01"], "archived": [True]})
+
+    # Must not raise polars.exceptions.ComputeError
+    out = reader.snapshot_records(new_lf, "emails", str(snap_dir), pk="id")
+    assert out is not None
+
+    result = pl.read_parquet(snap_dir / "emails.snapshot.parquet")
+    assert result.height == 2
+    assert set(result["id"].to_list()) == {1, 2}
+    # Column order in the output should match the original snapshot
+    assert result.columns == ["id", "archived", "createdAt"]
+
+
+def test_snapshot_records_merge_new_columns_appended(tmp_path):
+    """Columns that appear in new data but not the snapshot are appended at the end."""
+    snap_dir = tmp_path / "snap"
+    snap_dir.mkdir()
+    reader = PLLazyFrameReader(dir=str(tmp_path), root=str(tmp_path))
+
+    snap_lf = pl.LazyFrame({"id": [1], "archived": [False]})
+    reader.snapshot_records(snap_lf, "emails", str(snap_dir))
+
+    # New data has the existing columns reordered plus a brand-new one
+    new_lf = pl.LazyFrame({"id": [2], "archivedAt": ["2024-03-01"], "archived": [True]})
+
+    out = reader.snapshot_records(new_lf, "emails", str(snap_dir), pk="id")
+    assert out is not None
+
+    result = pl.read_parquet(snap_dir / "emails.snapshot.parquet")
+    assert result.height == 2
+    # Existing snapshot columns come first, new column is appended
+    assert result.columns[:2] == ["id", "archived"]
+    assert "archivedAt" in result.columns
+
+
+def test_snapshot_records_merge_identical_column_order(tmp_path):
+    """Identical column order still merges correctly (regression guard)."""
+    snap_dir = tmp_path / "snap"
+    snap_dir.mkdir()
+    reader = PLLazyFrameReader(dir=str(tmp_path), root=str(tmp_path))
+
+    snap_lf = pl.LazyFrame({"id": [1], "name": ["alice"]})
+    reader.snapshot_records(snap_lf, "users", str(snap_dir))
+
+    new_lf = pl.LazyFrame({"id": [2], "name": ["bob"]})
+    out = reader.snapshot_records(new_lf, "users", str(snap_dir), pk="id")
+    assert out is not None
+
+    result = pl.read_parquet(snap_dir / "users.snapshot.parquet")
+    assert result.height == 2
+    assert set(result["name"].to_list()) == {"alice", "bob"}
