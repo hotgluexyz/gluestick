@@ -126,33 +126,13 @@ class PLLazyFrameReader(Reader):
 
         snapshot_lf = self.read_snapshots(stream, snapshot_dir)
         if not overwrite and stream_data is not None and snapshot_lf is not None:
-            # Align column order and presence so that vertical_relaxed concat
-            # doesn't raise a schema mismatch when the upstream connector
-            # returns the same columns in a different order, adds new ones,
-            # or drops existing ones.
-            snapshot_cols = snapshot_lf.collect_schema().names()
-            new_data_cols_set = set(stream_data.collect_schema().names())
-            extra_cols = [c for c in stream_data.collect_schema().names() if c not in snapshot_cols]
-            # Rebuild stream_data following snapshot column order exactly, inserting
-            # nulls in-place for any columns dropped upstream so that the snapshot's
-            # historical data is preserved and the schemas stay aligned.
-            stream_data = stream_data.select(
-                [pl.col(c) if c in new_data_cols_set else pl.lit(None).alias(c) for c in snapshot_cols]
-                + [pl.col(c) for c in extra_cols]
-            )
-            if extra_cols:
-                snapshot_lf = snapshot_lf.with_columns(
-                    [pl.lit(None).alias(c) for c in extra_cols]
-                )
-
             snapshot_lf = snapshot_lf.join(
                 stream_data.select(pk),
                 on=pk,
                 how="anti"
             )
 
-
-            merged_lf = pl.concat(items=[snapshot_lf, stream_data],how="vertical_relaxed")
+            merged_lf = pl.concat(items=[snapshot_lf, stream_data], how="diagonal_relaxed")
 
             if use_csv:
                 merged_lf.sink_csv(f"{snapshot_dir}/{stream}.temp.snapshot.csv")
