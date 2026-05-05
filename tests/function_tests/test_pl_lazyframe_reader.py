@@ -349,3 +349,54 @@ def test_snapshot_records_merge_identical_column_order(tmp_path):
     result = pl.read_parquet(snap_dir / "users.snapshot.parquet")
     assert result.height == 2
     assert set(result["name"].to_list()) == {"alice", "bob"}
+
+
+def test_snapshot_records_merge_dropped_columns(tmp_path):
+    """Columns dropped upstream are preserved in the snapshot with nulls for new rows."""
+    snap_dir = tmp_path / "snap"
+    snap_dir.mkdir()
+    reader = PLLazyFrameReader(dir=str(tmp_path), root=str(tmp_path))
+
+    # Snapshot has three columns
+    snap_lf = pl.LazyFrame({"id": [1], "archived": [False], "extra": ["old_val"]})
+    reader.snapshot_records(snap_lf, "emails", str(snap_dir))
+
+    # New sync data no longer includes 'extra'
+    new_lf = pl.LazyFrame({"id": [2], "archived": [True]})
+    out = reader.snapshot_records(new_lf, "emails", str(snap_dir), pk="id")
+    assert out is not None
+
+    result = pl.read_parquet(snap_dir / "emails.snapshot.parquet")
+    assert result.height == 2
+    # Dropped column must still be present (historical data preserved)
+    assert "extra" in result.columns
+    # Existing row retains its value; new row gets null for the dropped column
+    assert result.filter(pl.col("id") == 1)["extra"][0] == "old_val"
+    assert result.filter(pl.col("id") == 2)["extra"][0] is None
+
+
+def test_snapshot_records_merge_dropped_reordered_and_extra_columns(tmp_path):
+    """All three schema-change cases at once: dropped col, reordered cols, new col."""
+    snap_dir = tmp_path / "snap"
+    snap_dir.mkdir()
+    reader = PLLazyFrameReader(dir=str(tmp_path), root=str(tmp_path))
+
+    # Snapshot: id, a, b, c
+    snap_lf = pl.LazyFrame({"id": [1], "a": ["x"], "b": [10], "c": [True]})
+    reader.snapshot_records(snap_lf, "items", str(snap_dir))
+
+    # New data: b dropped, a/c reordered, d added
+    new_lf = pl.LazyFrame({"id": [2], "c": [False], "a": ["y"], "d": ["new"]})
+    out = reader.snapshot_records(new_lf, "items", str(snap_dir), pk="id")
+    assert out is not None
+
+    result = pl.read_parquet(snap_dir / "items.snapshot.parquet")
+    assert result.height == 2
+    # Snapshot column order is preserved; dropped col stays in position; extra col appended
+    assert result.columns[:4] == ["id", "a", "b", "c"]
+    assert "d" in result.columns
+    # Historical row is untouched
+    assert result.filter(pl.col("id") == 1)["b"][0] == 10
+    # New row gets null for the dropped col
+    assert result.filter(pl.col("id") == 2)["b"][0] is None
+    assert result.filter(pl.col("id") == 2)["d"][0] == "new"

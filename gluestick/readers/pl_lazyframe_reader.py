@@ -128,12 +128,18 @@ class PLLazyFrameReader(Reader):
         if not overwrite and stream_data is not None and snapshot_lf is not None:
             # Align column order and presence so that vertical_relaxed concat
             # doesn't raise a schema mismatch when the upstream connector
-            # returns the same columns in a different order or adds new ones.
+            # returns the same columns in a different order, adds new ones,
+            # or drops existing ones.
             snapshot_cols = snapshot_lf.collect_schema().names()
-            new_data_cols = stream_data.collect_schema().names()
-            existing_cols = [c for c in snapshot_cols if c in new_data_cols]
-            extra_cols = [c for c in new_data_cols if c not in snapshot_cols]
-            stream_data = stream_data.select(existing_cols + extra_cols)
+            new_data_cols_set = set(stream_data.collect_schema().names())
+            extra_cols = [c for c in stream_data.collect_schema().names() if c not in snapshot_cols]
+            # Rebuild stream_data following snapshot column order exactly, inserting
+            # nulls in-place for any columns dropped upstream so that the snapshot's
+            # historical data is preserved and the schemas stay aligned.
+            stream_data = stream_data.select(
+                [pl.col(c) if c in new_data_cols_set else pl.lit(None).alias(c) for c in snapshot_cols]
+                + [pl.col(c) for c in extra_cols]
+            )
             if extra_cols:
                 snapshot_lf = snapshot_lf.with_columns(
                     [pl.lit(None).alias(c) for c in extra_cols]
