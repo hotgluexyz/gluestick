@@ -4,12 +4,36 @@ import ast
 import datetime
 import json
 import os
+import sys
 from contextlib import redirect_stdout
 from functools import singledispatch, partial
 import pandas as pd
-import singer
 from gluestick.reader import Reader
 import polars as pl
+
+
+def _write_singer_message(msg: dict) -> None:
+    sys.stdout.write(json.dumps(msg, default=str) + "\n")
+    sys.stdout.flush()
+
+
+def write_schema(stream: str, schema: dict, key_properties) -> None:
+    """Write a Singer SCHEMA message to stdout."""
+    if isinstance(key_properties, (str, bytes)):
+        key_properties = [key_properties]
+    if not isinstance(key_properties, list):
+        raise ValueError("key_properties must be a string or list of strings")
+    _write_singer_message({"type": "SCHEMA", "stream": stream, "schema": schema, "key_properties": key_properties})
+
+
+def write_record(stream: str, record: dict) -> None:
+    """Write a Singer RECORD message to stdout."""
+    _write_singer_message({"type": "RECORD", "stream": stream, "record": record})
+
+
+def write_state(value: dict) -> None:
+    """Write a Singer STATE message to stdout."""
+    _write_singer_message({"type": "STATE", "value": value})
 
 def _serialize_value(x):
     """Serialize value for Singer: JSON for list/dict, string for non-null scalars, pass null through."""
@@ -444,7 +468,7 @@ def pandas_df_to_singer(
 
     with open(output, mode) as f:
         with redirect_stdout(f):
-            singer.write_schema(stream, header_map, keys)
+            write_schema(stream, header_map, keys)
             for _, row in df.iterrows():
                 # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
                 if not (catalog_schema or include_all_unified_fields or keep_null_fields):
@@ -458,8 +482,8 @@ def pandas_df_to_singer(
                     filtered_row = filtered_row.to_dict()
 
                 filtered_row = deep_convert_datetimes(filtered_row)
-                singer.write_record(stream, filtered_row)
-            singer.write_state({})
+                write_record(stream, filtered_row)
+            write_state({})
 
 
 def gen_singer_header_from_polars_schema(
@@ -566,10 +590,10 @@ def polars_df_to_singer(
 
     with open(output, mode) as f:
         with redirect_stdout(f):
-            singer.write_schema(stream, header_map, keys)
+            write_schema(stream, header_map, keys)
             for row in df.iter_rows(named=True):
                 row = {k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(v, datetime.datetime) else v for k, v in row.items()}
-                singer.write_record(stream, row)
+                write_record(stream, row)
 
 
             
