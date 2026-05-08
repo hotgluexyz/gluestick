@@ -6,10 +6,14 @@ import json
 import os
 import sys
 from contextlib import redirect_stdout
-from functools import singledispatch, partial
+from functools import partial, singledispatch
+
 import pandas as pd
-from gluestick.reader import Reader
 import polars as pl
+import pytz
+from gluestick.reader import Reader
+
+_DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
 def _write_singer_message(msg: dict) -> None:
@@ -17,18 +21,28 @@ def _write_singer_message(msg: dict) -> None:
     sys.stdout.flush()
 
 
-def write_schema(stream: str, schema: dict, key_properties) -> None:
+def write_schema(stream: str, schema: dict, key_properties, bookmark_properties=None) -> None:
     """Write a Singer SCHEMA message to stdout."""
     if isinstance(key_properties, (str, bytes)):
         key_properties = [key_properties]
     if not isinstance(key_properties, list):
         raise ValueError("key_properties must be a string or list of strings")
-    _write_singer_message({"type": "SCHEMA", "stream": stream, "schema": schema, "key_properties": key_properties})
+    msg = {"type": "SCHEMA", "stream": stream, "schema": schema, "key_properties": key_properties}
+    if bookmark_properties:
+        msg["bookmark_properties"] = bookmark_properties
+    _write_singer_message(msg)
 
 
-def write_record(stream: str, record: dict) -> None:
+def write_record(stream: str, record: dict, version=None, time_extracted=None) -> None:
     """Write a Singer RECORD message to stdout."""
-    _write_singer_message({"type": "RECORD", "stream": stream, "record": record})
+    msg = {"type": "RECORD", "stream": stream, "record": record}
+    if version is not None:
+        msg["version"] = version
+    if time_extracted:
+        if not time_extracted.tzinfo:
+            raise ValueError("'time_extracted' must be either None or an aware datetime (with a time zone)")
+        msg["time_extracted"] = time_extracted.astimezone(pytz.utc).strftime(_DATETIME_FMT)
+    _write_singer_message(msg)
 
 
 def write_state(value: dict) -> None:

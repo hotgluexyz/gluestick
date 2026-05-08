@@ -1,9 +1,11 @@
 """Unit tests for the inlined Singer protocol write helpers."""
 
+import datetime
 import json
 import sys
 from pathlib import Path
 
+import pytz
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -46,6 +48,14 @@ class TestWriteSchema:
         with pytest.raises(ValueError):
             write_schema("stream", {}, 123)
 
+    def test_bookmark_properties_included_when_set(self, capsys):
+        msgs = _capture(capsys, write_schema, "orders", {"properties": {}}, [], bookmark_properties=["updated_at"])
+        assert msgs[0]["bookmark_properties"] == ["updated_at"]
+
+    def test_bookmark_properties_omitted_when_not_set(self, capsys):
+        msgs = _capture(capsys, write_schema, "orders", {"properties": {}}, [])
+        assert "bookmark_properties" not in msgs[0]
+
     def test_output_is_single_line(self, capsys):
         write_schema("s", {}, [])
         out = capsys.readouterr().out
@@ -70,6 +80,33 @@ class TestWriteRecord:
         record = {"id": 1, "address": {"city": "NYC", "zip": "10001"}}
         msgs = _capture(capsys, write_record, "contacts", record)
         assert msgs[0]["record"]["address"]["city"] == "NYC"
+
+    def test_version_included_when_set(self, capsys):
+        msgs = _capture(capsys, write_record, "orders", {"id": 1}, version=2)
+        assert msgs[0]["version"] == 2
+
+    def test_version_omitted_when_not_set(self, capsys):
+        msgs = _capture(capsys, write_record, "orders", {"id": 1})
+        assert "version" not in msgs[0]
+
+    def test_time_extracted_included_and_formatted_as_utc(self, capsys):
+        ts = datetime.datetime(2024, 3, 15, 10, 30, 0, tzinfo=pytz.utc)
+        msgs = _capture(capsys, write_record, "orders", {"id": 1}, time_extracted=ts)
+        assert msgs[0]["time_extracted"] == "2024-03-15T10:30:00.000000Z"
+
+    def test_time_extracted_converted_to_utc(self, capsys):
+        eastern = pytz.timezone("US/Eastern")
+        ts = eastern.localize(datetime.datetime(2024, 3, 15, 10, 30, 0))
+        msgs = _capture(capsys, write_record, "orders", {"id": 1}, time_extracted=ts)
+        assert msgs[0]["time_extracted"] == "2024-03-15T14:30:00.000000Z"
+
+    def test_time_extracted_naive_raises(self):
+        with pytest.raises(ValueError):
+            write_record("orders", {"id": 1}, time_extracted=datetime.datetime(2024, 1, 1))
+
+    def test_time_extracted_omitted_when_not_set(self, capsys):
+        msgs = _capture(capsys, write_record, "orders", {"id": 1})
+        assert "time_extracted" not in msgs[0]
 
     def test_output_is_single_line(self, capsys):
         write_record("s", {"k": "v"})
