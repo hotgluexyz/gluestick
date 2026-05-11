@@ -4,12 +4,50 @@ import ast
 import datetime
 import json
 import os
+import sys
 from contextlib import redirect_stdout
-from functools import singledispatch, partial
+from functools import partial, singledispatch
+
 import pandas as pd
-import singer
-from gluestick.reader import Reader
 import polars as pl
+import pytz
+from gluestick.reader import Reader
+
+_DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
+
+
+def _write_singer_message(msg: dict) -> None:
+    sys.stdout.write(json.dumps(msg, default=str) + "\n")
+    sys.stdout.flush()
+
+
+def write_schema(stream: str, schema: dict, key_properties, bookmark_properties=None) -> None:
+    """Write a Singer SCHEMA message to stdout."""
+    if isinstance(key_properties, (str, bytes)):
+        key_properties = [key_properties]
+    if not isinstance(key_properties, list):
+        raise ValueError("key_properties must be a string or list of strings")
+    msg = {"type": "SCHEMA", "stream": stream, "schema": schema, "key_properties": key_properties}
+    if bookmark_properties:
+        msg["bookmark_properties"] = bookmark_properties
+    _write_singer_message(msg)
+
+
+def write_record(stream: str, record: dict, version=None, time_extracted=None) -> None:
+    """Write a Singer RECORD message to stdout."""
+    msg = {"type": "RECORD", "stream": stream, "record": record}
+    if version is not None:
+        msg["version"] = version
+    if time_extracted:
+        if not time_extracted.tzinfo:
+            raise ValueError("'time_extracted' must be either None or an aware datetime (with a time zone)")
+        msg["time_extracted"] = time_extracted.astimezone(pytz.utc).strftime(_DATETIME_FMT)
+    _write_singer_message(msg)
+
+
+def write_state(value: dict) -> None:
+    """Write a Singer STATE message to stdout."""
+    _write_singer_message({"type": "STATE", "value": value})
 
 def _serialize_value(x):
     """Serialize value for Singer: JSON for list/dict, string for non-null scalars, pass null through."""
@@ -444,7 +482,7 @@ def pandas_df_to_singer(
 
     with open(output, mode) as f:
         with redirect_stdout(f):
-            singer.write_schema(stream, header_map, keys)
+            write_schema(stream, header_map, keys)
             for _, row in df.iterrows():
                 # keep null fields for catalog_schema, include_all_unified_fields and keep_null_fields
                 if not (catalog_schema or include_all_unified_fields or keep_null_fields):
@@ -458,8 +496,8 @@ def pandas_df_to_singer(
                     filtered_row = filtered_row.to_dict()
 
                 filtered_row = deep_convert_datetimes(filtered_row)
-                singer.write_record(stream, filtered_row)
-            singer.write_state({})
+                write_record(stream, filtered_row)
+            write_state({})
 
 
 def gen_singer_header_from_polars_schema(
@@ -566,10 +604,10 @@ def polars_df_to_singer(
 
     with open(output, mode) as f:
         with redirect_stdout(f):
-            singer.write_schema(stream, header_map, keys)
+            write_schema(stream, header_map, keys)
             for row in df.iter_rows(named=True):
                 row = {k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(v, datetime.datetime) else v for k, v in row.items()}
-                singer.write_record(stream, row)
+                write_record(stream, row)
 
 
             
