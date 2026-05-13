@@ -4,12 +4,50 @@ import ast
 import datetime
 import json
 import os
+import sys
 from contextlib import redirect_stdout
-from functools import singledispatch, partial
+from functools import partial, singledispatch
+
 import pandas as pd
-import singer
-from gluestick.reader import Reader
 import polars as pl
+import pytz
+from gluestick.reader import Reader
+
+_DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
+
+
+def _write_singer_message(msg: dict) -> None:
+    sys.stdout.write(json.dumps(msg, default=str) + "\n")
+    sys.stdout.flush()
+
+
+def write_schema(stream: str, schema: dict, key_properties, bookmark_properties=None) -> None:
+    """Write a Singer SCHEMA message to stdout."""
+    if isinstance(key_properties, (str, bytes)):
+        key_properties = [key_properties]
+    if not isinstance(key_properties, list):
+        raise ValueError("key_properties must be a string or list of strings")
+    msg = {"type": "SCHEMA", "stream": stream, "schema": schema, "key_properties": key_properties}
+    if bookmark_properties:
+        msg["bookmark_properties"] = bookmark_properties
+    _write_singer_message(msg)
+
+
+def write_record(stream: str, record: dict, version=None, time_extracted=None) -> None:
+    """Write a Singer RECORD message to stdout."""
+    msg = {"type": "RECORD", "stream": stream, "record": record}
+    if version is not None:
+        msg["version"] = version
+    if time_extracted:
+        if not time_extracted.tzinfo:
+            raise ValueError("'time_extracted' must be either None or an aware datetime (with a time zone)")
+        msg["time_extracted"] = time_extracted.astimezone(pytz.utc).strftime(_DATETIME_FMT)
+    _write_singer_message(msg)
+
+
+def write_state(value: dict) -> None:
+    """Write a Singer STATE message to stdout."""
+    _write_singer_message({"type": "STATE", "value": value})
 
 def _serialize_value(x):
     """Serialize value for Singer: JSON for list/dict, string for non-null scalars, pass null through."""
@@ -470,9 +508,7 @@ def pandas_df_to_singer(
         # Build the SCHEMA / STATE messages via singer (so message format and
         # any future format changes stay consistent), but write them directly
         # to the file rather than going through redirect_stdout + flush.
-        schema_msg = singer.SchemaMessage(stream=stream, schema=header_map, key_properties=list(keys))
-        f.write(singer.format_message(schema_msg))
-        f.write("\n")
+        write_schema(stream, header_map, keys)
 
         n = len(df)
         for start in range(0, n, chunk_size):
@@ -493,14 +529,8 @@ def pandas_df_to_singer(
                     
                 rec = deep_convert_datetimes(rec)
 
-                f.write(record_prefix)
-                f.write(json.dumps(rec, default=str))
-                f.write("}\n")
-
-            del records
-
-        f.write(singer.format_message(singer.StateMessage(value={})))
-        f.write("\n")
+                write_record(stream, rec)
+            write_state({})
 
 
 def gen_singer_header_from_polars_schema(
@@ -607,10 +637,10 @@ def polars_df_to_singer(
 
     with open(output, mode) as f:
         with redirect_stdout(f):
-            singer.write_schema(stream, header_map, keys)
+            write_schema(stream, header_map, keys)
             for row in df.iter_rows(named=True):
                 row = {k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(v, datetime.datetime) else v for k, v in row.items()}
-                singer.write_record(stream, row)
+                write_record(stream, row)
 
 
             

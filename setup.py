@@ -5,13 +5,12 @@ with open("README.md", "r") as fh:
 
 setup(
     name="gluestick",
-    version="3.0.9",
+    version="3.0.10",
     description="ETL utility functions built for the hotglue iPaaS platform",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/hotgluexyz/gluestick",
     install_requires=[
-        "singer-python>=4.0.0",
         "numpy>=1.4",
         "pandas>=1.2.5",
         "pyarrow>=8.0.0",
