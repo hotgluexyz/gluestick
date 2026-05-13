@@ -5,7 +5,6 @@ import datetime
 import json
 import os
 import sys
-from contextlib import redirect_stdout
 from functools import partial, singledispatch
 
 import pandas as pd
@@ -16,13 +15,26 @@ from gluestick.reader import Reader
 _DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
-def _write_singer_message(msg: dict) -> None:
-    sys.stdout.write(json.dumps(msg, default=str) + "\n")
-    sys.stdout.flush()
+def _write_singer_message(msg: dict, fp=None) -> None:
+    """Write a single Singer message as a newline-delimited JSON line.
+
+    ``fp`` defaults to ``sys.stdout`` for backwards compatibility.  When an
+    explicit file handle is provided we skip the per-message ``flush()`` and
+    rely on the caller's ``with open(...) as fp`` to flush on close, which
+    avoids a costly fsync per record on large exports.
+    """
+    if fp is None:
+        sys.stdout.write(json.dumps(msg, default=str) + "\n")
+        sys.stdout.flush()
+    else:
+        fp.write(json.dumps(msg, default=str) + "\n")
 
 
-def write_schema(stream: str, schema: dict, key_properties, bookmark_properties=None) -> None:
-    """Write a Singer SCHEMA message to stdout."""
+def write_schema(stream: str, schema: dict, key_properties, bookmark_properties=None, fp=None) -> None:
+    """Write a Singer SCHEMA message.
+
+    Pass ``fp`` to write to an explicit file handle instead of ``sys.stdout``.
+    """
     if isinstance(key_properties, (str, bytes)):
         key_properties = [key_properties]
     if not isinstance(key_properties, list):
@@ -30,11 +42,14 @@ def write_schema(stream: str, schema: dict, key_properties, bookmark_properties=
     msg = {"type": "SCHEMA", "stream": stream, "schema": schema, "key_properties": key_properties}
     if bookmark_properties:
         msg["bookmark_properties"] = bookmark_properties
-    _write_singer_message(msg)
+    _write_singer_message(msg, fp=fp)
 
 
-def write_record(stream: str, record: dict, version=None, time_extracted=None) -> None:
-    """Write a Singer RECORD message to stdout."""
+def write_record(stream: str, record: dict, version=None, time_extracted=None, fp=None) -> None:
+    """Write a Singer RECORD message.
+
+    Pass ``fp`` to write to an explicit file handle instead of ``sys.stdout``.
+    """
     msg = {"type": "RECORD", "stream": stream, "record": record}
     if version is not None:
         msg["version"] = version
@@ -42,12 +57,15 @@ def write_record(stream: str, record: dict, version=None, time_extracted=None) -
         if not time_extracted.tzinfo:
             raise ValueError("'time_extracted' must be either None or an aware datetime (with a time zone)")
         msg["time_extracted"] = time_extracted.astimezone(pytz.utc).strftime(_DATETIME_FMT)
-    _write_singer_message(msg)
+    _write_singer_message(msg, fp=fp)
 
 
-def write_state(value: dict) -> None:
-    """Write a Singer STATE message to stdout."""
-    _write_singer_message({"type": "STATE", "value": value})
+def write_state(value: dict, fp=None) -> None:
+    """Write a Singer STATE message.
+
+    Pass ``fp`` to write to an explicit file handle instead of ``sys.stdout``.
+    """
+    _write_singer_message({"type": "STATE", "value": value}, fp=fp)
 
 def _serialize_value(x):
     """Serialize value for Singer: JSON for list/dict, string for non-null scalars, pass null through."""
@@ -502,13 +520,9 @@ def pandas_df_to_singer(
     do_trim = trim_nested_nulls and not keep_nulls
 
     chunk_size = int(os.environ.get("SINGER_CHUNK_SIZE", "20000"))
-    record_prefix = '{"type": "RECORD", "stream": ' + json.dumps(stream) + ', "record": '
 
     with open(output, mode) as f:
-        # Build the SCHEMA / STATE messages via singer (so message format and
-        # any future format changes stay consistent), but write them directly
-        # to the file rather than going through redirect_stdout + flush.
-        write_schema(stream, header_map, keys)
+        write_schema(stream, header_map, keys, fp=f)
 
         n = len(df)
         for start in range(0, n, chunk_size):
@@ -526,11 +540,12 @@ def pandas_df_to_singer(
 
                 if do_trim:
                     rec = remove_nulls_deep(rec)
-                    
+
                 rec = deep_convert_datetimes(rec)
 
-                write_record(stream, rec)
-            write_state({})
+                write_record(stream, rec, fp=f)
+            f.flush() # flush after each chunk to avoid buffering
+        write_state({}, fp=f)
 
 
 def gen_singer_header_from_polars_schema(
@@ -636,11 +651,10 @@ def polars_df_to_singer(
 
 
     with open(output, mode) as f:
-        with redirect_stdout(f):
-            write_schema(stream, header_map, keys)
-            for row in df.iter_rows(named=True):
-                row = {k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(v, datetime.datetime) else v for k, v in row.items()}
-                write_record(stream, row)
+        write_schema(stream, header_map, keys, fp=f)
+        for row in df.iter_rows(named=True):
+            row = {k: v.strftime(_DATETIME_FMT) if isinstance(v, datetime.datetime) else v for k, v in row.items()}
+            write_record(stream, row, fp=f)
 
 
             
