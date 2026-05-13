@@ -5,6 +5,7 @@ import datetime
 import json
 import os
 import sys
+from contextlib import redirect_stdout
 from functools import partial, singledispatch
 
 import pandas as pd
@@ -651,10 +652,11 @@ def polars_df_to_singer(
 
 
     with open(output, mode) as f:
-        write_schema(stream, header_map, keys, fp=f)
-        for row in df.iter_rows(named=True):
-            row = {k: v.strftime(_DATETIME_FMT) if isinstance(v, datetime.datetime) else v for k, v in row.items()}
-            write_record(stream, row, fp=f)
+        with redirect_stdout(f):
+            write_schema(stream, header_map, keys)
+            for row in df.iter_rows(named=True):
+                row = {k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(v, datetime.datetime) else v for k, v in row.items()}
+                write_record(stream, row)
 
 
             
