@@ -44,6 +44,9 @@ from gluestick.singer import (  # noqa: E402
     unwrap_json_schema,
     deep_convert_datetimes,
     remove_nulls_deep,
+    write_schema,
+    write_record,
+    write_state,
 )
 
 
@@ -93,7 +96,7 @@ def pandas_df_to_singer_original(
 
     with open(output, mode) as f:
         with redirect_stdout(f):
-            singer.write_schema(stream, header_map, keys)
+            write_schema(stream, header_map, keys)
             for _, row in df.iterrows():
                 if not (catalog_schema or include_all_unified_fields or keep_null_fields):
                     filtered_row = row.dropna()
@@ -108,8 +111,9 @@ def pandas_df_to_singer_original(
                     filtered_row = filtered_row.to_dict()
 
                 filtered_row = deep_convert_datetimes(filtered_row)
-                singer.write_record(stream, filtered_row)
-            singer.write_state({})
+                write_record(stream, filtered_row)
+            write_state({})
+
 
 
 # ---------------------------------------------------------------------------
