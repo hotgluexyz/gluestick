@@ -40,7 +40,7 @@ class PolarsReader(Reader):
                 headers = pd.read_csv(filepath, nrows=0).columns.tolist()
                 types_params = self.get_types_from_catalog(catalog, stream, headers=headers)
                 if types_params:
-                    return pl.read_csv(filepath, dtypes=types_params)
+                    return pl.read_csv(filepath, schema_overrides=types_params)
 
         return pl.read_csv(filepath)
 
