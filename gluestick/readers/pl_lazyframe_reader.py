@@ -87,7 +87,7 @@ class PLLazyFrameReader(Reader):
 
     def snapshot_records(
         self,
-        stream_data: pl.LazyFrame,
+        stream_data: pl.LazyFrame | None,
         stream: str,
         snapshot_dir: str,
         pk: str | list[str] = "id", 
@@ -135,11 +135,11 @@ class PLLazyFrameReader(Reader):
             merged_lf = pl.concat(items=[snapshot_lf, stream_data], how="diagonal_relaxed")
 
             if use_csv:
-                merged_lf.sink_csv(f"{snapshot_dir}/{stream}.temp.snapshot.csv")
+                merged_lf.sink_csv(f"{snapshot_dir}/{stream}.temp.snapshot.csv", batch_size=100_000)
                 os.remove(f"{snapshot_dir}/{stream}.snapshot.csv")
                 os.rename(f"{snapshot_dir}/{stream}.temp.snapshot.csv", f"{snapshot_dir}/{stream}.snapshot.csv")
             else:
-                merged_lf.sink_parquet(f"{snapshot_dir}/{stream}.temp.snapshot.parquet")
+                merged_lf.sink_parquet(f"{snapshot_dir}/{stream}.temp.snapshot.parquet", row_group_size=100_000)
                 os.remove(f"{snapshot_dir}/{stream}.snapshot.parquet")
                 os.rename(f"{snapshot_dir}/{stream}.temp.snapshot.parquet", f"{snapshot_dir}/{stream}.snapshot.parquet")
             
@@ -155,9 +155,9 @@ class PLLazyFrameReader(Reader):
                 canonical_path = f"{snapshot_dir}/{stream}.snapshot.parquet"
             lock_path = prepare_snapshot_write(canonical_path)
             if use_csv:
-                stream_data.sink_csv(lock_path)
+                stream_data.sink_csv(lock_path, batch_size=100_000)
             else:
-                stream_data.sink_parquet(lock_path)
+                stream_data.sink_parquet(lock_path, row_group_size=100_000)
             finish_snapshot_write(lock_path, canonical_path)
             return stream_data
         elif snapshot_lf is not None:
