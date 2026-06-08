@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="gluestick",
-    version="3.0.14",
+    version="3.0.15",
     description="ETL utility functions built for the hotglue iPaaS platform",
     long_description=long_description,
     long_description_content_type="text/markdown",
