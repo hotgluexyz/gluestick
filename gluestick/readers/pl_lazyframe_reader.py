@@ -87,13 +87,14 @@ class PLLazyFrameReader(Reader):
 
     def snapshot_records(
         self,
-        stream_data: pl.LazyFrame,
+        stream_data: pl.LazyFrame | None,
         stream: str,
         snapshot_dir: str,
         pk: str | list[str] = "id", 
         just_new: bool = False, 
         use_csv: bool = False, 
-        overwrite: bool = False, 
+        overwrite: bool = False,
+        row_group_size: int | None = None,
     ) -> pl.LazyFrame | None:
         """Update a snapshot file and return the merged data.
 
@@ -113,6 +114,9 @@ class PLLazyFrameReader(Reader):
             Whether to use csv format for the snapshot instead of parquet.
         overwrite: bool
             Whether to overwrite the existing snapshot file instead of updating and merging.
+        row_group_size: int | None
+            The row group size to use for the snapshot parquet file.
+            If None, the row group size will be determined by the polars default.
 
         Returns
         -------
@@ -139,7 +143,7 @@ class PLLazyFrameReader(Reader):
                 os.remove(f"{snapshot_dir}/{stream}.snapshot.csv")
                 os.rename(f"{snapshot_dir}/{stream}.temp.snapshot.csv", f"{snapshot_dir}/{stream}.snapshot.csv")
             else:
-                merged_lf.sink_parquet(f"{snapshot_dir}/{stream}.temp.snapshot.parquet")
+                merged_lf.sink_parquet(f"{snapshot_dir}/{stream}.temp.snapshot.parquet", row_group_size=row_group_size)
                 os.remove(f"{snapshot_dir}/{stream}.snapshot.parquet")
                 os.rename(f"{snapshot_dir}/{stream}.temp.snapshot.parquet", f"{snapshot_dir}/{stream}.snapshot.parquet")
             
@@ -157,7 +161,7 @@ class PLLazyFrameReader(Reader):
             if use_csv:
                 stream_data.sink_csv(lock_path)
             else:
-                stream_data.sink_parquet(lock_path)
+                stream_data.sink_parquet(lock_path, row_group_size=row_group_size)
             finish_snapshot_write(lock_path, canonical_path)
             return stream_data
         elif snapshot_lf is not None:

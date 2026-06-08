@@ -674,6 +674,7 @@ def polars_lf_to_export(
     schema=None,
     stringify_objects=False,
     reserved_variables={},
+    row_group_size: int | None = None,
 ):
     """Write a Polars LazyFrame to a specified format.
 
@@ -705,6 +706,9 @@ def polars_lf_to_export(
     reserved_variables: dict
         A dictionary of default values for the format variables to be used
         in the output_file_prefix.
+    row_group_size: int | None
+            The row group size to use for the output parquet file.
+            If None, the row group size will be determined by the polars default.
 
     Returns
     -------
@@ -729,7 +733,7 @@ def polars_lf_to_export(
         # export data as singer
         to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
     elif export_format == "parquet":
-        data.sink_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
+        data.sink_parquet(os.path.join(output_dir, f"{composed_name}.parquet"), row_group_size=row_group_size)
     elif export_format == "csv":
         data.sink_csv(os.path.join(output_dir, f"{composed_name}.csv"))
     else:
