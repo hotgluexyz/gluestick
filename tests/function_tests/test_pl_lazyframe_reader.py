@@ -194,6 +194,55 @@ def test_get_csv_applies_catalog_types(tmp_path):
     assert df.schema["is_active"] == pl.Boolean
 
 
+def test_get_csv_applies_catalog_types_with_datetime_columns(tmp_path):
+    csv_path = tmp_path / "orders.csv"
+    _write_csv(csv_path)
+    _write_catalog(tmp_path / "catalog.json")
+
+    reader = PLLazyFrameReader(dir=str(tmp_path), root=str(tmp_path))
+    lf = reader.get("orders", catalog_types=True)
+    df = lf.collect()
+
+    assert df.height == 2
+    assert df.schema["order_id"] == pl.Int64
+    assert df.schema["amount"] == pl.Float64
+    assert df.schema["created_at"] == pl.String
+    assert df.schema["is_active"] == pl.Boolean
+
+
+def test_get_csv_parse_dates_only_skips_cast_lf_from_schema(tmp_path):
+    """When the catalog only has date-time fields, dtype is empty and cast_lf_from_schema is skipped."""
+    csv_path = tmp_path / "events.csv"
+    csv_path.write_text(
+        "created_at\n"
+        "2024-01-01T00:00:00Z\n"
+        "2024-01-02T12:30:00Z\n"
+    )
+    catalog = {
+        "streams": [
+            {
+                "stream": "events",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "created_at": {"type": "string", "format": "date-time"},
+                    },
+                },
+            }
+        ]
+    }
+    (tmp_path / "catalog.json").write_text(json.dumps(catalog))
+
+    reader = PLLazyFrameReader(dir=str(tmp_path), root=str(tmp_path))
+    reader.input_files["events"] = str(csv_path)
+    lf = reader.get_csv("events", str(csv_path), catalog_types=True)
+    df = lf.collect()
+
+    assert df.height == 2
+    assert df.columns == ["created_at"]
+    assert df.schema["created_at"] == pl.String
+
+
 def test_get_csv_without_catalog_raw_scan(tmp_path):
     csv_path = tmp_path / "orders.csv"
     _write_csv(csv_path)

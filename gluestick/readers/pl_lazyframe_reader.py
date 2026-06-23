@@ -3,7 +3,6 @@ from gluestick.utils.polars_utils import map_pd_type_to_polars, cast_lf_from_sch
 from gluestick.snapshot_lock import prepare_snapshot_write, finish_snapshot_write
 import pyarrow.parquet as pq
 import polars as pl
-import pandas as pd
 import os
 class PLLazyFrameReader(Reader):
 
@@ -33,13 +32,43 @@ class PLLazyFrameReader(Reader):
 
 
     def get_csv(self, stream, filepath, catalog_types=True):
+        """Scan a CSV into a LazyFrame, optionally applying catalog types.
+
+        When catalog_types is enabled, column names are read from the file header,
+        then a full-column scan schema is built from the catalog. Date-time fields
+        (parse_dates) are kept as strings; other catalog types are applied via
+        cast_lf_from_schema. A complete schema is required because scan_csv(schema=)
+        must list every column, unlike read_csv(schema_overrides=).
+        """
         if catalog_types:
             catalog = self.read_catalog()
             if catalog:
-                headers = pd.read_csv(filepath, nrows=0).columns.tolist()
-                types_params = self.get_types_from_catalog(catalog, stream, headers=headers)
-                if types_params:
-                    return pl.scan_csv(filepath, schema=types_params)
+                headers = pl.scan_csv(filepath, infer_schema_length=0).collect_schema().names()
+                type_information = super().get_types_from_catalog(
+                    catalog, stream, headers=headers
+                )
+                dtype = type_information.get("dtype", {})
+                parse_dates = type_information.get("parse_dates", [])
+                if dtype or parse_dates:
+                    scan_schema = {}
+                    for col in headers:
+                        if col in parse_dates:
+                            # Keep date-time cols as strings; cast_lf_from_schema skips parse_dates (same as parquet).
+                            scan_schema[col] = pl.String
+                        elif col in dtype:
+                            scan_schema[col] = map_pd_type_to_polars(dtype[col])
+                        else:
+                            # Column in the file but not in the catalog.
+                            scan_schema[col] = pl.String
+                    # scan_csv schema= must include every CSV column or Polars raises a column count mismatch.
+                    lf = pl.scan_csv(filepath, schema=scan_schema)
+                    if dtype:
+                        cast_types = {
+                            col: map_pd_type_to_polars(pd_type)
+                            for col, pd_type in dtype.items()
+                        }
+                        return cast_lf_from_schema(lf, cast_types)
+                    return lf
 
         return pl.scan_csv(filepath)
 
