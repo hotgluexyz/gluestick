@@ -21,6 +21,13 @@ setup(
     author="hotglue",
     author_email="hello@hotglue.xyz",
     license="MIT",
+    classifiers=[
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
+    ],
     packages=find_packages(include=["gluestick", "gluestick.*"]),
     zip_safe=False,
     extras_require={
