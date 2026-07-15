@@ -652,7 +652,6 @@ def pandas_df_to_export(
                 os.path.join(output_dir, f"{composed_name}.parquet"),
                 engine="fastparquet",
                 compression="zstd",
-                compression_level=3,
             )
         else:
             data.to_parquet(
