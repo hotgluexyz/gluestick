@@ -172,7 +172,12 @@ class PLLazyFrameReader(Reader):
                 os.remove(f"{snapshot_dir}/{stream}.snapshot.csv")
                 os.rename(f"{snapshot_dir}/{stream}.temp.snapshot.csv", f"{snapshot_dir}/{stream}.snapshot.csv")
             else:
-                merged_lf.sink_parquet(f"{snapshot_dir}/{stream}.temp.snapshot.parquet", row_group_size=row_group_size)
+                merged_lf.sink_parquet(
+                    f"{snapshot_dir}/{stream}.temp.snapshot.parquet",
+                    compression="zstd",
+                    compression_level=3,
+                    row_group_size=row_group_size,
+                )
                 os.remove(f"{snapshot_dir}/{stream}.snapshot.parquet")
                 os.rename(f"{snapshot_dir}/{stream}.temp.snapshot.parquet", f"{snapshot_dir}/{stream}.snapshot.parquet")
             
@@ -190,7 +195,12 @@ class PLLazyFrameReader(Reader):
             if use_csv:
                 stream_data.sink_csv(lock_path)
             else:
-                stream_data.sink_parquet(lock_path, row_group_size=row_group_size)
+                stream_data.sink_parquet(
+                    lock_path,
+                    compression="zstd",
+                    compression_level=3,
+                    row_group_size=row_group_size,
+                )
             finish_snapshot_write(lock_path, canonical_path)
             return stream_data
         elif snapshot_lf is not None:

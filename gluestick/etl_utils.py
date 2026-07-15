@@ -185,7 +185,7 @@ def _write_snapshot_file(data, stream, snapshot_dir, use_csv=False):
     if use_csv:
         data.to_csv(lock_path, index=False)
     else:
-        data.to_parquet(lock_path, index=False)
+        data.to_parquet(lock_path, index=False, compression="zstd", compression_level=3)
     finish_snapshot_write(lock_path, canonical_path)
     return data
 
@@ -651,9 +651,15 @@ def pandas_df_to_export(
             data.to_parquet(
                 os.path.join(output_dir, f"{composed_name}.parquet"),
                 engine="fastparquet",
+                compression="zstd",
+                compression_level=3,
             )
         else:
-            data.to_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
+            data.to_parquet(
+                os.path.join(output_dir, f"{composed_name}.parquet"),
+                compression="zstd",
+                compression_level=3,
+            )
     elif export_format == "json":
         data.to_json(f"{output_dir}/{composed_name}.json", orient="records", date_format='iso')
     elif export_format == "jsonl":
@@ -733,7 +739,12 @@ def polars_lf_to_export(
         # export data as singer
         to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
     elif export_format == "parquet":
-        data.sink_parquet(os.path.join(output_dir, f"{composed_name}.parquet"), row_group_size=row_group_size)
+        data.sink_parquet(
+            os.path.join(output_dir, f"{composed_name}.parquet"),
+            compression="zstd",
+            compression_level=3,
+            row_group_size=row_group_size,
+        )
     elif export_format == "csv":
         data.sink_csv(os.path.join(output_dir, f"{composed_name}.csv"))
     else:
@@ -806,7 +817,11 @@ def polars_df_to_export(
         # export data as singer
         to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
     elif export_format == "parquet":
-        data.write_parquet(os.path.join(output_dir, f"{composed_name}.parquet"))
+        data.write_parquet(
+            os.path.join(output_dir, f"{composed_name}.parquet"),
+            compression="zstd",
+            compression_level=3,
+        )
     elif export_format == "csv":
         data.write_csv(os.path.join(output_dir, f"{composed_name}.csv"))
     elif export_format == "json":

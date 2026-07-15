@@ -80,7 +80,7 @@ class PolarsReader(Reader):
         if use_csv:
             data.write_csv(lock_path)
         else:
-            data.write_parquet(lock_path)
+            data.write_parquet(lock_path, compression="zstd", compression_level=3)
         finish_snapshot_write(lock_path, canonical_path)
 
     def read_snapshots(self,stream, snapshot_dir, **kwargs) -> pl.DataFrame | None:
