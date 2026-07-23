@@ -1,7 +1,8 @@
-gluestick [![Build Status](https://travis-ci.org/hotgluexyz/gluestick.svg?branch=master)](https://travis-ci.org/hotgluexyz/gluestick)
-=============
+# Gluestick #
+![PyPI Version](https://img.shields.io/pypi/v/gluestick)
+[![License](https://img.shields.io/pypi/l/gluestick)](https://github.com/hotgluexyz/gluestick/blob/master/LICENSE)
 
-A small Python module containing quick utility functions for standard ETL processes.
+A Python library for efficient ETL processes, optimized for hotglue
 
 ## Installation ##
 
@@ -12,12 +13,8 @@ pip install gluestick
 ## Links ##
 
 * [Source]
-* [Wiki]
 * [Issues]
 * [Slack]
-
-## License ##
-[MIT]
 
 ## Dependencies ##
 * NumPy
@@ -67,8 +64,7 @@ If you wish to chat with our team, feel free to join our [Slack]!
 
 
 [Source]: https://github.com/hotgluexyz/gluestick
-[Wiki]: https://github.com/hotgluexyz/gluestick/wiki
 [Issues]: https://github.com/hotgluexyz/gluestick/issues
 [MIT]: https://tldrlegal.com/license/mit-license
-[hotglue]: https://hotglue.xyz
+[hotglue]: https://hotglue.com
 [Slack]: https://bit.ly/2KBGGq1
