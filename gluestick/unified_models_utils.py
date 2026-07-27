@@ -6,7 +6,7 @@ from gluestick.etl_utils import localize_datetime
 
 __all__ = ["validate_model", "handle_validation_error"]
 
-def handle_validation_error(error_message, file_path='error_log.txt', raise_error=False):
+def handle_validation_error(error_message, file_path='error_log.txt', raise_error=False) -> None:
         """Handle a validation error by either raising it or logging it to a file.
 
         When *raise_error* is ``True`` the error is raised immediately as a
@@ -31,7 +31,7 @@ def handle_validation_error(error_message, file_path='error_log.txt', raise_erro
             f.write(f"ERROR: {error_message}\n")
             f.write(f"TRACEBACK:\n{traceback.format_exc()}\n\n")
 
-def validate_model(list, model, config, raise_error=True):
+def validate_model(list, model, config, raise_error=True) -> list:
     """Validate and cast a list of dictionaries against a Pydantic model.
 
     Each dictionary in *list* is localized for datetime fields (using the

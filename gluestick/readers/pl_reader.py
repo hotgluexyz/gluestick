@@ -33,7 +33,7 @@ class PolarsReader(Reader):
             return self.get_csv(stream, filepath, catalog_types)
         raise ValueError(f"Unsupported file type: {filepath}")
 
-    def get_csv(self, stream, filepath, catalog_types=True):
+    def get_csv(self, stream, filepath, catalog_types=True) -> pl.DataFrame:
         if catalog_types:
             catalog = self.read_catalog()
             if catalog:
@@ -44,7 +44,7 @@ class PolarsReader(Reader):
 
         return pl.read_csv(filepath)
 
-    def get_parquet(self, stream, filepath, catalog_types=True):
+    def get_parquet(self, stream, filepath, catalog_types=True) -> pl.DataFrame:
         df = pl.read_parquet(filepath)
         if catalog_types:
             catalog = self.read_catalog()
@@ -55,7 +55,7 @@ class PolarsReader(Reader):
                     return cast_df_from_schema(df, types_params)
         return df
 
-    def get_types_from_catalog(self, catalog, stream, headers=None):
+    def get_types_from_catalog(self, catalog, stream, headers=None) -> dict[str, pl.DataType]:
         """Get the polars types base on the catalog definition."""
         type_information = super().get_types_from_catalog(catalog, stream, headers)
         pd_types = type_information.get("dtype", {})

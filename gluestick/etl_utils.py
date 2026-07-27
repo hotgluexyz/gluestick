@@ -16,10 +16,11 @@ import polars as pl
 from gluestick.readers.pl_lazyframe_reader import PLLazyFrameReader
 from gluestick.readers.pl_reader import PolarsReader
 from functools import singledispatch
+from typing import Any, NoReturn
 from gluestick.date_utils import localize_datetime
 from gluestick.snapshot_lock import prepare_snapshot_write, finish_snapshot_write
 
-def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
+def read_csv_folder(path, converters={}, index_cols={}, ignore=[]) -> dict[str, pd.DataFrame]:
     """Read a set of CSV files in a folder using read_csv().
 
     Notes
@@ -92,7 +93,7 @@ def read_csv_folder(path, converters={}, index_cols={}, ignore=[]):
     return results
 
 
-def read_parquet_folder(path, ignore=[]):
+def read_parquet_folder(path, ignore=[]) -> dict[str, pd.DataFrame]:
     """Read a set of parquet files in a folder using read_parquet().
 
     Notes
@@ -148,7 +149,7 @@ def read_parquet_folder(path, ignore=[]):
     return results
 
 
-def read_snapshots(stream, snapshot_dir, **kwargs):
+def read_snapshots(stream, snapshot_dir, **kwargs) -> pd.DataFrame | None:
     """Read a snapshot file.
 
     Parameters
@@ -191,7 +192,7 @@ def _write_snapshot_file(data, stream, snapshot_dir, use_csv=False):
 
 def snapshot_records(
     stream_data, stream, snapshot_dir, pk="id", just_new=False, use_csv=False, coerce_types= False, localize_datetime_types=False, overwrite=False, **kwargs
-):
+) -> pd.DataFrame | None:
     """Update a snapshot file.
 
     Parameters
@@ -268,7 +269,7 @@ def snapshot_records(
         return snapshot
 
 
-def get_row_hash(row, columns):
+def get_row_hash(row, columns) -> str:
     """Update a snapshot file.
 
     Parameters
@@ -295,7 +296,7 @@ def get_row_hash(row, columns):
     return hashlib.md5(row_str.encode()).hexdigest()
 
 
-def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=False):
+def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=False) -> pd.DataFrame:
     """Drop the rows that were present in previous versions of the dataframe.
 
     Notes
@@ -365,7 +366,7 @@ def drop_redundant(df, name, output_dir, pk=[], updated_flag=False, use_csv=Fals
     df = df.drop("hash", axis=1)
     return df
 
-def clean_convert(input):
+def clean_convert(input) -> Any:
     """Cleans all None values from a list or dict.
 
     Notes
@@ -400,7 +401,7 @@ def clean_convert(input):
     elif not pd.isna(input):
         return input
 
-def clean_obj_null_values(obj):
+def clean_obj_null_values(obj) -> str | dict:
     """Replaces all null values by None.
 
     Notes
@@ -426,7 +427,7 @@ def clean_obj_null_values(obj):
         return {}
 
 
-def get_index_safely(arr, index):
+def get_index_safely(arr, index) -> Any:
     """Safely retrieves an item from an list by index.
 
     Parameters
@@ -449,7 +450,7 @@ def get_index_safely(arr, index):
 
 def build_string_format_variables(
     default_kwargs=dict(), use_tenant_metadata=True, subtenant_delimiter="_"
-):
+) -> dict:
     """Builds a dictionary of string format variables from multiple sources.
 
     Parameters
@@ -524,7 +525,7 @@ def build_string_format_variables(
     return final_kwargs
 
 
-def format_str_safely(str_to_format, **format_variables):
+def format_str_safely(str_to_format, **format_variables) -> str:
     """Safely formats a string by replacing placeholders with provided values.
 
     Notes
@@ -586,7 +587,7 @@ def pandas_df_to_export(
     stringify_objects=False,
     reserved_variables={},
     trim_nested_nulls=False
-):
+) -> None:
     """Parse a stringified dict or list of dicts.
 
     Notes
@@ -680,7 +681,7 @@ def polars_lf_to_export(
     stringify_objects=False,
     reserved_variables={},
     row_group_size: int | None = None,
-):
+) -> None:
     """Write a Polars LazyFrame to a specified format.
 
     Notes
@@ -762,7 +763,7 @@ def polars_df_to_export(
     schema=None,
     stringify_objects=False,
     reserved_variables={},
-):
+) -> None:
     """Write a Polars DataFrame to a specified format.
 
     Notes
@@ -830,7 +831,7 @@ def polars_df_to_export(
     else:
         raise ValueError(f"Unsupported export format: {export_format}")
 
-def exception(exception, root_dir, error_message=None):
+def exception(exception, root_dir, error_message=None) -> NoReturn:
     """
     Stores an exception and a message into a file errors.txt, 
     then the executor reads the error from the txt file to showcase the right error.
@@ -851,7 +852,7 @@ def exception(exception, root_dir, error_message=None):
         outfile.write(error)
     raise Exception(error)
 
-def merge_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk):
+def merge_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk) -> pd.DataFrame:
     """
     Merges DataFrame with target created snapshot to retrieve existing target ids.
     
@@ -920,7 +921,7 @@ def merge_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk):
     print(f"Finished getting ids from snapshot for '{stream}'.")
     return merged
 
-def read_tenant_custom_mapping(tenant_config, flow_id=None):
+def read_tenant_custom_mapping(tenant_config, flow_id=None) -> tuple[dict, dict]:
     """Read the tenant mapping from the tenant config.
 
     Parameters
@@ -966,7 +967,7 @@ def read_tenant_custom_mapping(tenant_config, flow_id=None):
             raise Exception(f"Error processing mapping key '{combined_stream_name}': {e}. Skipping.")
     return custom_field_mappings, stream_name_mapping
 
-def should_map_table(model_name, config):
+def should_map_table(model_name, config) -> bool:
     """
     Checks if a table is selected for mapping.
 
@@ -982,7 +983,7 @@ def should_map_table(model_name, config):
         print(f"Skipping mapping for {model_name}, not selected.")
     return bool(should_map)
 
-def pluck_fields(objects, id_field, filter_ids, target_fields, partition_key=None, partition_key_value=None):
+def pluck_fields(objects, id_field, filter_ids, target_fields, partition_key=None, partition_key_value=None) -> Any:
     """
     Extracts specific attributes from objects in a list based on filter criteria.
 
@@ -1053,7 +1054,7 @@ def pluck_fields(objects, id_field, filter_ids, target_fields, partition_key=Non
         raise ValueError("filter_ids must be a integer, string, list, or set.")
 
     # Helper to extract attributes from an object
-    def extract(obj):
+    def extract(obj) -> Any:
         if isinstance(target_fields, str):
             return obj[target_fields]
         elif isinstance(target_fields, list):
@@ -1083,7 +1084,7 @@ def pluck_fields(objects, id_field, filter_ids, target_fields, partition_key=Non
         return None
     return results
 
-def process_custom_fields(row):
+def process_custom_fields(row) -> list[dict] | None:
     """
     Process a dictionary into a list of dictionaries with custom field structure: 'name' and string 'value' keys.
 
@@ -1101,7 +1102,7 @@ def process_custom_fields(row):
         # Handle DataFrame row (pd.Series) input
         return [{"name": key, "value": value} for key, value in row.to_dict().items() if not pd.isna(value)]
 
-def pluck_fields_by_regex(row, regex_field, return_as_cf=False):
+def pluck_fields_by_regex(row, regex_field, return_as_cf=False) -> dict | list[dict]:
     """
     Filters a dictionary, keeping only the key-value pairs where the key matches the regex.
 
@@ -1119,7 +1120,7 @@ def pluck_fields_by_regex(row, regex_field, return_as_cf=False):
         result = process_custom_fields(result)
     return result
 
-def map_fields(row, mapping, other_data={}):
+def map_fields(row, mapping, other_data={}) -> dict:
     """Maps the row values according to the mapping dict.
 
     Notes
@@ -1183,7 +1184,7 @@ def map_fields(row, mapping, other_data={}):
                 output[key] = row.get(value)
     return output
 
-def map_fields_df(df, mapping, other_data):
+def map_fields_df(df, mapping, other_data) -> pd.DataFrame:
     """Maps the DataFrame values according to the mapping dict, optimized for large datasets.
 
     Parameters

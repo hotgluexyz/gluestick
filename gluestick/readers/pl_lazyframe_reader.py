@@ -31,7 +31,7 @@ class PLLazyFrameReader(Reader):
         raise ValueError(f"Unsupported file type: {filepath}")
 
 
-    def get_csv(self, stream, filepath, catalog_types=True):
+    def get_csv(self, stream, filepath, catalog_types=True) -> pl.LazyFrame:
         """Scan a CSV into a LazyFrame, optionally applying catalog types.
 
         When catalog_types is enabled, column names are read from the file header,
@@ -72,7 +72,7 @@ class PLLazyFrameReader(Reader):
 
         return pl.scan_csv(filepath)
 
-    def get_parquet(self, stream, filepath, catalog_types=True):
+    def get_parquet(self, stream, filepath, catalog_types=True) -> pl.LazyFrame:
         if catalog_types:
             catalog = self.read_catalog()
             if catalog:
@@ -84,7 +84,7 @@ class PLLazyFrameReader(Reader):
         return pl.scan_parquet(filepath)
             
 
-    def get_types_from_catalog(self, catalog, stream, headers=None):
+    def get_types_from_catalog(self, catalog, stream, headers=None) -> dict[str, pl.DataType]:
         """Get the polars types base on the catalog definition."""
         type_information = super().get_types_from_catalog(catalog, stream, headers)
         pd_types = type_information.get("dtype", {})

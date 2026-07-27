@@ -1,6 +1,6 @@
 import polars as pl
 
-def map_pd_type_to_polars(type_name):
+def map_pd_type_to_polars(type_name) -> pl.DataType:
     if not isinstance(type_name, str):
         # its a pd type class
         type_name = type_name.__name__
@@ -28,7 +28,7 @@ def map_pd_type_to_polars(type_name):
     else:
         raise ValueError(f"Unknown type: {type_name}")
 
-def cast_lf_from_schema(lf: pl.LazyFrame, types_params: dict):
+def cast_lf_from_schema(lf: pl.LazyFrame, types_params: dict) -> pl.LazyFrame:
     schema = lf.collect_schema()
     return lf.with_columns([
                     pl.col(col)
@@ -37,7 +37,7 @@ def cast_lf_from_schema(lf: pl.LazyFrame, types_params: dict):
                     for col, dtype in types_params.items()
             ])
 
-def cast_df_from_schema(df: pl.DataFrame, types_params: dict):
+def cast_df_from_schema(df: pl.DataFrame, types_params: dict) -> pl.DataFrame:
     schema = df.schema
     return df.with_columns([
                     pl.col(col)
@@ -47,7 +47,7 @@ def cast_df_from_schema(df: pl.DataFrame, types_params: dict):
             ])
 
 
-def _cast_expr(col: str, dtype: pl.DataType):
+def _cast_expr(col: str, dtype: pl.DataType) -> pl.Expr:
     if dtype == pl.Boolean:
         lowered = pl.col(col).cast(pl.Utf8, strict=False).str.to_lowercase()
         string_mapped = (
