@@ -1,5 +1,8 @@
 import os
 import json
+from collections.abc import Generator
+from typing import Any
+
 import pandas as pd
 from pandas.io.parsers import TextFileReader
 import pyarrow as pa
@@ -26,16 +29,16 @@ class Reader:
         self.dir = dir
         self.input_files = self.read_directories()
 
-    def __dict__(self):
+    def __dict__(self) -> dict:
         return self.input_files
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(list(self.input_files.keys()))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(list(self.input_files.keys()))
 
-    def read_parquet_with_chunks(self, filepath, chunksize):
+    def read_parquet_with_chunks(self, filepath, chunksize) -> Generator[pd.DataFrame, None, None]:
         parquet_file = pq.ParquetFile(filepath)
 
         for batch in parquet_file.iter_batches(batch_size=chunksize):
@@ -43,7 +46,7 @@ class Reader:
             # TODO: add support for catalog types
             yield df
 
-    def get(self, stream, default=None, catalog_types=False, **kwargs):
+    def get(self, stream, default=None, catalog_types=False, **kwargs) -> Any:
         """Read the selected file."""
         filepath = self.input_files.get(stream)
         if not filepath:
@@ -112,7 +115,7 @@ class Reader:
 
         return df
 
-    def get_metadata(self, stream):
+    def get_metadata(self, stream) -> dict:
         """Get metadata from parquet file."""
         file = self.input_files.get(stream)
         if file is None:
@@ -124,7 +127,7 @@ class Reader:
             }
         return {}
 
-    def get_pk(self, stream):
+    def get_pk(self, stream) -> list:
         """Get pk from parquet file or catalog if available."""
         key_properties = []
         if self.read_directories().get(stream, "").endswith(".parquet"):
@@ -148,7 +151,7 @@ class Reader:
                         )
         return key_properties
 
-    def read_directories(self, ignore=[]):
+    def read_directories(self, ignore=[]) -> dict[str, str]:
         """Read all the available directories for input files.
 
         Parameters
@@ -186,7 +189,7 @@ class Reader:
 
         return results
 
-    def read_catalog(self):
+    def read_catalog(self) -> dict | None:
         """Read the catalog.json file."""
         file_name = f"{self.root}/catalog.json"
         if os.path.isfile(file_name):
@@ -198,7 +201,7 @@ class Reader:
             catalog = None
         return catalog
     
-    def clean_catalog(self, catalog):
+    def clean_catalog(self, catalog) -> dict:
         clean_catalog = {}
         if "streams" in catalog :
             for stream_info in catalog ["streams"]:
@@ -210,7 +213,7 @@ class Reader:
         print(f"Finished loading target schemas for streams: {list(clean_catalog.keys())}")
         return clean_catalog
     
-    def read_target_catalog(self, process_schema=False):
+    def read_target_catalog(self, process_schema=False) -> dict | None | tuple[dict, dict]:
         """Read the target catalog.json file."""
         filename = f"{self.root}/target-catalog.json"
 
@@ -226,7 +229,7 @@ class Reader:
         
         return raw_target_catalog , self.clean_catalog(raw_target_catalog)
 
-    def get_types_from_catalog(self, catalog, stream, headers=None):
+    def get_types_from_catalog(self, catalog, stream, headers=None) -> dict:
         """Get the pandas types base on the catalog definition.
 
         Parameters

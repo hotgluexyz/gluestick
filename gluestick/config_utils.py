@@ -9,7 +9,7 @@ logger = logging.getLogger("ConfigUtils")
 __all__ = ["establish_directories", "load_config_json"]
 
 
-def establish_directories(global_vars):
+def establish_directories(global_vars) -> tuple:
     """Resolve directory paths, create them on disk, and return key parameters.
 
     Each parameter is resolved by first checking the corresponding
@@ -106,7 +106,7 @@ def _load_config_json_data(config_json_data, config_vars):
     return config_json_data
 
 
-def load_config_json(config_json, config_vars):
+def load_config_json(config_json, config_vars) -> dict:
     """Load configuration from a JSON file and merge it with default variables.
 
     Reads a JSON configuration file from the given path and merges its

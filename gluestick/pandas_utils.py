@@ -1,6 +1,7 @@
 """Utilities for pandas dataframes containing objects."""
 
 import ast
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,7 @@ def json_tuple_to_cols(
         "cols": {"key_prop": "Name", "value_prop": "Value"},
         "look_up": {"key_prop": "name", "value_prop": "value"},
     },
-):
+) -> pd.DataFrame:
     """Convert a column with a JSON tuple in it to two column.
 
     Parameters
@@ -70,7 +71,7 @@ def json_tuple_to_cols(
     return df.drop(column_name, 1)
 
 
-def rename(df, target_columns):
+def rename(df, target_columns) -> pd.DataFrame:
     """Rename columns in DataFrame using a json format.
 
     Notes
@@ -111,7 +112,7 @@ def rename(df, target_columns):
             return df[target_column_names].rename(columns=target_columns)
     return df
 
-def enforce_exploded_col_types(df, column_name, stream=None):
+def enforce_exploded_col_types(df, column_name, stream=None) -> pd.DataFrame:
     """Enforce types for columns created by exploded fields for better consistency.
 
     Notes
@@ -171,7 +172,7 @@ def enforce_exploded_col_types(df, column_name, stream=None):
     return df
 
 
-def explode_json_to_rows(df, column_name, drop=True, stream=None, **kwargs):
+def explode_json_to_rows(df, column_name, drop=True, stream=None, **kwargs) -> pd.DataFrame:
     """Explodes a column with an array of objects into multiple rows.
 
     Notes
@@ -272,7 +273,7 @@ def explode_json_to_rows(df, column_name, drop=True, stream=None, **kwargs):
 
         return y
 
-    def flatten(y):
+    def flatten(y) -> pd.Series:
         if type(y) is dict:
             return pd.Series(nested_to_record(y, sep=".", max_level=max_level))
         else:
@@ -294,7 +295,7 @@ def explode_json_to_rows(df, column_name, drop=True, stream=None, **kwargs):
     return df
 
 
-def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
+def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs) -> pd.DataFrame:
     """Convert a JSON column that has an array value into a DataFrame.
 
     Notes
@@ -377,7 +378,7 @@ def explode_json_to_cols(df: pd.DataFrame, column_name: str, **kwargs):
     return df
 
 
-def array_to_dict_reducer(key_prop=None, value_prop=None):
+def array_to_dict_reducer(key_prop=None, value_prop=None) -> Callable[[dict, dict], dict]:
     """Convert an array into a dictionary.
 
     Parameters
@@ -411,7 +412,7 @@ def array_to_dict_reducer(key_prop=None, value_prop=None):
     return reducer
 
 
-def compress_rows_to_col(df: pd.DataFrame, column_prefix: str, pk):
+def compress_rows_to_col(df: pd.DataFrame, column_prefix: str, pk) -> pd.DataFrame:
     """Compress exploded columns rows back to a single column.
 
     Parameters

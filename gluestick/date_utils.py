@@ -6,7 +6,7 @@ from pytz import utc
 
 __all__ = ["get_model_datetime_fields", "localize_datetime"]
 
-def get_model_datetime_fields(model):
+def get_model_datetime_fields(model) -> list[str]:
     """Inspect a Pydantic model and return the names of all fields typed as datetime.
 
     Iterates over the model's ``model_fields`` and checks each field's type
@@ -35,7 +35,7 @@ def get_model_datetime_fields(model):
 
     return datetime_fields
 
-def localize_datetime(data, column_names, timezone="UTC"):
+def localize_datetime(data, column_names, timezone="UTC") -> pd.Series | dict:
     """Ensure datetime values carry timezone information.
 
     This function operates in two modes depending on the input types:

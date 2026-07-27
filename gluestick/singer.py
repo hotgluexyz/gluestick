@@ -7,6 +7,7 @@ import os
 import sys
 from contextlib import redirect_stdout
 from functools import partial, singledispatch
+from typing import Any
 
 import pandas as pd
 import polars as pl
@@ -68,7 +69,7 @@ def write_state(value: dict, fp=None) -> None:
     """
     _write_singer_message({"type": "STATE", "value": value}, fp=fp)
 
-def _serialize_value(x):
+def _serialize_value(x) -> Any:
     """Serialize value for Singer: JSON for list/dict, string for non-null scalars, pass null through."""
     if isinstance(x, (list, dict)):
         return json.dumps(x, default=str)
@@ -77,7 +78,7 @@ def _serialize_value(x):
     return x
 
 
-def _is_null_scalar(v):
+def _is_null_scalar(v) -> bool:
     """Fast null check for a single scalar from ``DataFrame.to_dict``.
 
     Handles ``None``, float NaN, ``pd.NaT``, and ``pd.NA`` (the null sentinel
@@ -95,7 +96,7 @@ def _is_null_scalar(v):
     return False
 
 
-def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True):
+def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True) -> tuple[pd.DataFrame, dict]:
     """Generate singer headers based on pandas types.
 
     Parameters
@@ -186,7 +187,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
     return df, header_map
 
 
-def to_singer_schema(input):
+def to_singer_schema(input) -> dict:
     """Generate singer headers based on pandas types.
 
     Parameters
@@ -218,7 +219,7 @@ def to_singer_schema(input):
         return {"type": ["number", "null"]}
     return {"type": ["string", "null"]}
 
-def _resolve_refs(schema, defs):
+def _resolve_refs(schema, defs) -> dict:
     if isinstance(schema, dict):
         if '$ref' in schema:
             ref_path = schema['$ref'].split('/')
@@ -238,8 +239,8 @@ def _resolve_refs(schema, defs):
     else:
         return schema
 
-def unwrap_json_schema(schema):
-    def simplify_anyof(schema):
+def unwrap_json_schema(schema) -> dict:
+    def simplify_anyof(schema) -> dict:
         if isinstance(schema, dict):
             if 'anyOf' in schema:
                 types = [item.get('type') for item in schema['anyOf'] if 'type' in item]
@@ -276,7 +277,7 @@ def unwrap_json_schema(schema):
     return simplified_schema
 
 
-def deep_convert_datetimes(value):
+def deep_convert_datetimes(value) -> Any:
     """Transforms all nested datetimes in a list or dict to %Y-%m-%dT%H:%M:%S.%fZ.
 
     Notes
@@ -302,7 +303,7 @@ def deep_convert_datetimes(value):
         return value.strftime("%Y-%m-%d")
     return value
 
-def parse_objs(x):
+def parse_objs(x) -> Any:
     """Parse a stringified dict or list of dicts.
 
     Notes
@@ -329,7 +330,7 @@ def parse_objs(x):
     except:
         return json.loads(x)
 
-def combine_anyof_types(field_types):
+def combine_anyof_types(field_types) -> list[str]:
     types = set()
     for item in field_types:
         if 'type' in item:
@@ -341,7 +342,7 @@ def combine_anyof_types(field_types):
                 raise ValueError(f"Invalid type: {item['type']}")
     return sorted(types)
 
-def get_catalog_schema(stream):
+def get_catalog_schema(stream) -> dict:
     """Get a df schema using the catalog.
 
     Parameters
@@ -379,7 +380,7 @@ def get_catalog_schema(stream):
     return schema
 
 
-def parse_df_cols(df, schema):
+def parse_df_cols(df, schema) -> pd.DataFrame:
     """Parse all df list and dict columns according to schema.
 
     Parameters
@@ -400,7 +401,7 @@ def parse_df_cols(df, schema):
     return df
 
 
-def remove_nulls_deep(data):
+def remove_nulls_deep(data) -> Any:
     """
     Recursively remove null or NaN values from a nested data structure.
 
@@ -445,7 +446,7 @@ def to_singer(
     keep_null_fields=False,
     catalog_stream=None,
     recursive_typing=True
-):
+) -> None:
     raise NotImplementedError("to_singer is not implemented for this type")
 
 @to_singer.register(pd.DataFrame)
@@ -462,7 +463,7 @@ def pandas_df_to_singer(
     catalog_stream=None,
     trim_nested_nulls=False,
     recursive_typing=True
-):
+) -> None:
     """Convert a pandas DataFrame into a singer file.
 
     Parameters
@@ -616,7 +617,7 @@ def polars_df_to_singer(
     keep_null_fields=False,
     catalog_stream=None,
     recursive_typing=True
-):
+) -> None:
     """Convert a polars DataFrame into a singer file.
 
     Parameters
@@ -673,7 +674,7 @@ def polars_lf_to_singer(
     keep_null_fields=False,
     catalog_stream=None,
     recursive_typing=True
-):
+) -> None:
     """Convert a polars Lazyframe into a singer file.
 
     Parameters
