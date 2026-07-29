@@ -1019,7 +1019,7 @@ def read_tenant_custom_mapping(tenant_config, flow_id=None):
         return {}, {}
 
     if raw_mapping_data.get("version") == "1.0":
-        return _parse_v1_mapping_format(raw_mapping_data, connector_id=flow_id)
+        return _parse_v1_mapping_format(raw_mapping_data, connector_id=os.environ.get("CONNECTOR_ID", os.environ.get("TAP")))
 
     return _parse_legacy_mapping_format(raw_mapping_data, flow_id=flow_id)
 
