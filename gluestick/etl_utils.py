@@ -998,7 +998,7 @@ def _parse_legacy_mapping_format(raw_mapping_data, flow_id=None):
     return custom_field_mappings, stream_name_mapping
 
 
-def read_tenant_custom_mapping(tenant_config, flow_id=None):
+def read_tenant_custom_mapping(tenant_config, flow_id=None) -> tuple[dict, dict]:
     """Read the tenant mapping from the tenant config.
 
     Detects format from ``version`` in the mapping payload: ``"1.0"`` uses the
