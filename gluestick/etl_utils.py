@@ -921,24 +921,54 @@ def merge_id_from_snapshot(df, snapshot_dir, stream, flow_id, pk) -> pd.DataFram
     print(f"Finished getting ids from snapshot for '{stream}'.")
     return merged
 
-def read_tenant_custom_mapping(tenant_config, flow_id=None) -> tuple[dict, dict]:
-    """Read the tenant mapping from the tenant config.
+def _parse_v1_mapping_format(raw_mapping_data, connector_id=None):
+    """Parse connectorList-style mappings into field and stream name maps.
 
-    Parameters
-    ----------
-    tenant_config : dict
-        The tenant config.
+    Expected shape::
+
+        {
+            "salesforce": [
+                {"source": "customers", "target": "Contact", "fields": {...}},
+                ...
+            ],
+            "version": "1.0",
+            "formatOrigin": "connectorList"
+        }
     """
-    # read mapping from tenant config
-    raw_mapping_data = tenant_config.get("hotglue_mapping", {}).get("mapping", {})
-    if not raw_mapping_data:
-        print("No 'hotglue_mapping.mapping' section found in tenant config.")
-        return {}, {}
-
     custom_field_mappings = {}
     stream_name_mapping = {}
 
-    # get flow_id from tenant config
+    if connector_id and isinstance(raw_mapping_data.get(connector_id), list):
+        mapping_entries = raw_mapping_data[connector_id]
+    else:
+        mapping_entries = []
+        for value in raw_mapping_data.values():
+            if isinstance(value, list):
+                mapping_entries.extend(value)
+
+    if not mapping_entries:
+        print(f"No mapping list found for connector_id: {connector_id}")
+        return custom_field_mappings, stream_name_mapping
+
+    for entry in mapping_entries:
+        if not isinstance(entry, dict):
+            raise ValueError(f"Unexpected mapping entry type: {type(entry)}")
+        try:
+            source_stream = entry["source"]
+            target_stream = entry["target"]
+            custom_field_mappings[source_stream] = entry.get("fields", {})
+            stream_name_mapping[source_stream] = target_stream
+        except KeyError as e:
+            raise Exception(f"Error processing mapping entry '{entry}': missing {e}. Skipping.")
+
+    return custom_field_mappings, stream_name_mapping
+
+
+def _parse_legacy_mapping_format(raw_mapping_data, flow_id=None):
+    """Parse legacy SourceStream/TargetStream mappings into field and stream name maps."""
+    custom_field_mappings = {}
+    stream_name_mapping = {}
+
     potential_flow_id_key = (
         list(raw_mapping_data.keys())[0]
         if len(raw_mapping_data) == 1
@@ -946,18 +976,17 @@ def read_tenant_custom_mapping(tenant_config, flow_id=None) -> tuple[dict, dict]
     )
 
     flow_id = flow_id or potential_flow_id_key
-    raw_mapping_data = raw_mapping_data.get(flow_id)
+    flow_mapping = raw_mapping_data.get(flow_id)
 
-    if not raw_mapping_data:
+    if not flow_mapping:
         print(f"No mapping found for flow_id: {flow_id}")
         return custom_field_mappings, stream_name_mapping
-    
-    if not isinstance(raw_mapping_data, dict):
-        print(f"Unexpected structure in mapping content: Expected dict, got {type(raw_mapping_data)}")
+
+    if not isinstance(flow_mapping, dict):
+        print(f"Unexpected structure in mapping content: Expected dict, got {type(flow_mapping)}")
         raise ValueError("Invalid mapping structure.")
 
-    # process mapping
-    for combined_stream_name, field_map in raw_mapping_data.items():
+    for combined_stream_name, field_map in flow_mapping.items():
         try:
             # Key format is SourceStream/TargetStream
             source_stream, target_stream = combined_stream_name.split("/", 1)
@@ -965,7 +994,34 @@ def read_tenant_custom_mapping(tenant_config, flow_id=None) -> tuple[dict, dict]
             stream_name_mapping[source_stream] = target_stream
         except Exception as e:
             raise Exception(f"Error processing mapping key '{combined_stream_name}': {e}. Skipping.")
+
     return custom_field_mappings, stream_name_mapping
+
+
+def read_tenant_custom_mapping(tenant_config, flow_id=None) -> tuple[dict, dict]:
+    """Read the tenant mapping from the tenant config.
+
+    Detects format from ``version`` in the mapping payload: ``"1.0"`` uses the
+    connectorList format (``[{source, target, fields}, ...]``); otherwise the
+    legacy ``SourceStream/TargetStream`` dict format is used.
+
+    Parameters
+    ----------
+    tenant_config : dict
+        The tenant config.
+    flow_id : str, optional
+        Flow id for the legacy format, or connector id (e.g. ``"salesforce"``)
+        for the ``version: "1.0"`` connectorList format.
+    """
+    raw_mapping_data = tenant_config.get("hotglue_mapping", {}).get("mapping", {})
+    if not raw_mapping_data:
+        print("No 'hotglue_mapping.mapping' section found in tenant config.")
+        return {}, {}
+
+    if raw_mapping_data.get("version") == "1.0":
+        return _parse_v1_mapping_format(raw_mapping_data, connector_id=os.environ.get("CONNECTOR_ID", os.environ.get("TAP")))
+
+    return _parse_legacy_mapping_format(raw_mapping_data, flow_id=flow_id)
 
 def should_map_table(model_name, config) -> bool:
     """
