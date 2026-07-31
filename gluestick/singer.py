@@ -18,7 +18,7 @@ _DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 X_HOTGLUE_KEY = "x-hotglue"
 
 
-def build_x_hotglue(target_state_fields=None, target_state_include_hash=False):
+def build_x_hotglue(target_state_fields=None, target_state_include_hash=False) -> dict | None:
     """Build the ``x-hotglue`` envelope for Singer SCHEMA messages.
 
     Parameters
