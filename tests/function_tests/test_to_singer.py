@@ -10,7 +10,7 @@ import datetime
 
 import pandas as pd
 import polars as pl
-from gluestick.singer import to_singer, gen_singer_header_from_polars_schema
+from gluestick.singer import X_HOTGLUE_KEY, to_singer, gen_singer_header_from_polars_schema
 
 
 def _read_singer_lines(path):
@@ -69,6 +69,54 @@ class TestToSingerBasic:
         to_singer(df, "invoices", str(tmp_path), keys=["invoice_id"])
         schema = _get_schema(_read_singer_lines(tmp_path / "data.singer"))
         assert schema["key_properties"] == ["invoice_id"]
+
+
+class TestTargetStateXHotglue:
+    def test_omitted_by_default(self, tmp_path):
+        df = pd.DataFrame({"externalId": ["a"], "email": ["a@example.com"]})
+        to_singer(df, "Contacts", str(tmp_path), keys=["externalId"])
+        schema = _get_schema(_read_singer_lines(tmp_path / "data.singer"))
+        assert X_HOTGLUE_KEY not in schema
+
+    def test_writes_target_state_fields(self, tmp_path):
+        df = pd.DataFrame({"externalId": ["a"], "email": ["a@example.com"]})
+        to_singer(
+            df,
+            "Contacts",
+            str(tmp_path),
+            keys=["externalId"],
+            target_state_fields=["email", "status"],
+        )
+        schema = _get_schema(_read_singer_lines(tmp_path / "data.singer"))
+        assert schema[X_HOTGLUE_KEY] == {"target_state_fields": ["email", "status"]}
+
+    def test_writes_include_hash_when_true(self, tmp_path):
+        df = pd.DataFrame({"externalId": ["a"]})
+        to_singer(
+            df,
+            "Contacts",
+            str(tmp_path),
+            keys=["externalId"],
+            target_state_include_hash=True,
+        )
+        schema = _get_schema(_read_singer_lines(tmp_path / "data.singer"))
+        assert schema[X_HOTGLUE_KEY] == {"target_state_include_hash": True}
+
+    def test_writes_both_fields(self, tmp_path):
+        df = pd.DataFrame({"externalId": ["a"], "email": ["a@example.com"]})
+        to_singer(
+            df,
+            "Contacts",
+            str(tmp_path),
+            keys=["externalId"],
+            target_state_fields=["email"],
+            target_state_include_hash=True,
+        )
+        schema = _get_schema(_read_singer_lines(tmp_path / "data.singer"))
+        assert schema[X_HOTGLUE_KEY] == {
+            "target_state_fields": ["email"],
+            "target_state_include_hash": True,
+        }
 
 
 class TestNullHandling:
