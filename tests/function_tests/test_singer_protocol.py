@@ -10,7 +10,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from gluestick.singer import write_record, write_schema, write_state
+from gluestick.singer import (
+    X_HOTGLUE_KEY,
+    build_x_hotglue,
+    write_record,
+    write_schema,
+    write_state,
+)
 
 
 def _capture(capsys, fn, *args, **kwargs):
@@ -60,6 +66,57 @@ class TestWriteSchema:
         write_schema("s", {}, [])
         out = capsys.readouterr().out
         assert out.count("\n") == 1
+
+    def test_x_hotglue_included_when_set(self, capsys):
+        x_hotglue = {
+            "target_state_fields": ["email"],
+            "target_state_include_hash": True,
+        }
+        msgs = _capture(capsys, write_schema, "contacts", {"properties": {}}, [], x_hotglue=x_hotglue)
+        assert msgs[0][X_HOTGLUE_KEY] == x_hotglue
+
+    def test_x_hotglue_omitted_when_not_set(self, capsys):
+        msgs = _capture(capsys, write_schema, "contacts", {"properties": {}}, [])
+        assert X_HOTGLUE_KEY not in msgs[0]
+
+
+class TestBuildXHotglue:
+    def test_returns_none_when_unset(self):
+        assert build_x_hotglue() is None
+        assert build_x_hotglue(target_state_fields=[]) is None
+        assert build_x_hotglue(target_state_include_hash=False) is None
+
+    def test_fields_only(self):
+        assert build_x_hotglue(target_state_fields=["email", "status"]) == {
+            "target_state_fields": ["email", "status"],
+        }
+
+    def test_single_field_string_coerced_to_list(self):
+        assert build_x_hotglue(target_state_fields="email") == {
+            "target_state_fields": ["email"],
+        }
+
+    def test_include_hash_only(self):
+        assert build_x_hotglue(target_state_include_hash=True) == {
+            "target_state_include_hash": True,
+        }
+
+    def test_fields_and_include_hash(self):
+        assert build_x_hotglue(
+            target_state_fields=["email"],
+            target_state_include_hash=True,
+        ) == {
+            "target_state_fields": ["email"],
+            "target_state_include_hash": True,
+        }
+
+    def test_invalid_fields_type_raises(self):
+        with pytest.raises(ValueError):
+            build_x_hotglue(target_state_fields=123)
+
+    def test_non_string_field_names_raise(self):
+        with pytest.raises(ValueError):
+            build_x_hotglue(target_state_fields=["email", 1])
 
 
 class TestWriteRecord:

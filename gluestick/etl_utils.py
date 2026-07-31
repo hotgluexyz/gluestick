@@ -569,7 +569,9 @@ def to_export(
     output_file_prefix=os.environ.get("OUTPUT_FILE_PREFIX"), 
     schema=None, 
     stringify_objects=False, 
-    reserved_variables={}
+    reserved_variables={},
+    target_state_fields=None,
+    target_state_include_hash=False,
     ) -> None:
     raise NotImplementedError("to_export is not implemented for this dataframe type")
 
@@ -586,7 +588,9 @@ def pandas_df_to_export(
     schema=None,
     stringify_objects=False,
     reserved_variables={},
-    trim_nested_nulls=False
+    trim_nested_nulls=False,
+    target_state_fields=None,
+    target_state_include_hash=False,
 ) -> None:
     """Parse a stringified dict or list of dicts.
 
@@ -620,6 +624,12 @@ def pandas_df_to_export(
         in the output_file_prefix.
     trim_nested_nulls: bool
         Flag for singer export to trim nulls from nested fields
+    target_state_fields: list[str] | str | None
+        Payload field names to persist in target state metadata (SCHEMA ``x-hotglue``).
+        Only used when ``export_format`` is ``singer``.
+    target_state_include_hash: bool
+        When True, request record hash inclusion in target state metadata.
+        Only used when ``export_format`` is ``singer``. Defaults to False.
 
     Returns
     -------
@@ -646,7 +656,18 @@ def pandas_df_to_export(
         reader = Reader()
         keys = keys or reader.get_pk(name)
         # export data as singer
-        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema, trim_nested_nulls=trim_nested_nulls)
+        to_singer(
+            data,
+            composed_name,
+            output_dir,
+            keys=keys,
+            allow_objects=True,
+            unified_model=unified_model,
+            schema=schema,
+            trim_nested_nulls=trim_nested_nulls,
+            target_state_fields=target_state_fields,
+            target_state_include_hash=target_state_include_hash,
+        )
     elif export_format == "parquet":
         if stringify_objects:
             data.to_parquet(
@@ -681,6 +702,8 @@ def polars_lf_to_export(
     stringify_objects=False,
     reserved_variables={},
     row_group_size: int | None = None,
+    target_state_fields=None,
+    target_state_include_hash=False,
 ) -> None:
     """Write a Polars LazyFrame to a specified format.
 
@@ -715,6 +738,12 @@ def polars_lf_to_export(
     row_group_size: int | None
             The row group size to use for the output parquet file.
             If None, the row group size will be determined by the polars default.
+    target_state_fields: list[str] | str | None
+        Payload field names to persist in target state metadata (SCHEMA ``x-hotglue``).
+        Only used when ``export_format`` is ``singer``.
+    target_state_include_hash: bool
+        When True, request record hash inclusion in target state metadata.
+        Only used when ``export_format`` is ``singer``. Defaults to False.
 
     Returns
     -------
@@ -737,7 +766,17 @@ def polars_lf_to_export(
         reader = PLLazyFrameReader()
         keys = keys or reader.get_pk(name)
         # export data as singer
-        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+        to_singer(
+            data,
+            composed_name,
+            output_dir,
+            keys=keys,
+            allow_objects=True,
+            unified_model=unified_model,
+            schema=schema,
+            target_state_fields=target_state_fields,
+            target_state_include_hash=target_state_include_hash,
+        )
     elif export_format == "parquet":
         data.sink_parquet(
             os.path.join(output_dir, f"{composed_name}.parquet"),
@@ -763,6 +802,8 @@ def polars_df_to_export(
     schema=None,
     stringify_objects=False,
     reserved_variables={},
+    target_state_fields=None,
+    target_state_include_hash=False,
 ) -> None:
     """Write a Polars DataFrame to a specified format.
 
@@ -793,6 +834,12 @@ def polars_df_to_export(
     reserved_variables: dict
         A dictionary of default values for the format variables to be used
         in the output_file_prefix.
+    target_state_fields: list[str] | str | None
+        Payload field names to persist in target state metadata (SCHEMA ``x-hotglue``).
+        Only used when ``export_format`` is ``singer``.
+    target_state_include_hash: bool
+        When True, request record hash inclusion in target state metadata.
+        Only used when ``export_format`` is ``singer``. Defaults to False.
 
     Returns
     -------
@@ -815,7 +862,17 @@ def polars_df_to_export(
         reader = PolarsReader()
         keys = keys or reader.get_pk(name)
         # export data as singer
-        to_singer(data, composed_name, output_dir, keys=keys, allow_objects=True, unified_model=unified_model, schema=schema)
+        to_singer(
+            data,
+            composed_name,
+            output_dir,
+            keys=keys,
+            allow_objects=True,
+            unified_model=unified_model,
+            schema=schema,
+            target_state_fields=target_state_fields,
+            target_state_include_hash=target_state_include_hash,
+        )
     elif export_format == "parquet":
         data.write_parquet(
             os.path.join(output_dir, f"{composed_name}.parquet"),
