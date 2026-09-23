@@ -15,6 +15,41 @@ import pytz
 from gluestick.reader import Reader
 
 _DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
+X_HOTGLUE_KEY = "x-hotglue"
+
+
+def build_x_hotglue(target_state_fields=None, target_state_include_hash=False) -> dict | None:
+    """Build the ``x-hotglue`` envelope for Singer SCHEMA messages.
+
+    Parameters
+    ----------
+    target_state_fields : list[str] | str | None
+        Field names from export payload records to include in target state metadata.
+        A single string is treated as a one-element list. Empty lists are ignored.
+    target_state_include_hash : bool
+        When True, add ``target_state_include_hash`` to the envelope.
+
+    Returns
+    -------
+    dict | None
+        The ``x-hotglue`` payload, or None when there is nothing to emit.
+    """
+    payload = {}
+
+    if target_state_fields is not None:
+        if isinstance(target_state_fields, str):
+            target_state_fields = [target_state_fields]
+        if not isinstance(target_state_fields, list):
+            raise ValueError("target_state_fields must be a string or list of strings")
+        if not all(isinstance(field, str) for field in target_state_fields):
+            raise ValueError("target_state_fields must contain only strings")
+        if target_state_fields:
+            payload["target_state_fields"] = target_state_fields
+
+    if target_state_include_hash:
+        payload["target_state_include_hash"] = True
+
+    return payload or None
 
 
 def _write_singer_message(msg: dict, fp=None) -> None:
@@ -32,8 +67,30 @@ def _write_singer_message(msg: dict, fp=None) -> None:
         fp.write(json.dumps(msg, default=str) + "\n")
 
 
-def write_schema(stream: str, schema: dict, key_properties, bookmark_properties=None, fp=None) -> None:
+def write_schema(
+    stream: str,
+    schema: dict,
+    key_properties,
+    bookmark_properties=None,
+    fp=None,
+    x_hotglue=None,
+) -> None:
     """Write a Singer SCHEMA message.
+
+    Parameters
+    ----------
+    stream : str
+        Stream name for the schema message.
+    schema : dict
+        JSON Schema describing stream records.
+    key_properties : list[str] | str
+        Primary key property names for the stream.
+    bookmark_properties : list[str] | None
+        Optional bookmark property names for the stream.
+    fp : file object | None
+        Optional file handle. Defaults to ``sys.stdout``.
+    x_hotglue : dict | None
+        Optional ``x-hotglue`` envelope written alongside the schema (target state config).
 
     Pass ``fp`` to write to an explicit file handle instead of ``sys.stdout``.
     """
@@ -44,6 +101,8 @@ def write_schema(stream: str, schema: dict, key_properties, bookmark_properties=
     msg = {"type": "SCHEMA", "stream": stream, "schema": schema, "key_properties": key_properties}
     if bookmark_properties:
         msg["bookmark_properties"] = bookmark_properties
+    if x_hotglue:
+        msg[X_HOTGLUE_KEY] = x_hotglue
     _write_singer_message(msg, fp=fp)
 
 
@@ -445,7 +504,9 @@ def to_singer(
     unified_model=None,
     keep_null_fields=False,
     catalog_stream=None,
-    recursive_typing=True
+    recursive_typing=True,
+    target_state_fields=None,
+    target_state_include_hash=False,
 ) -> None:
     raise NotImplementedError("to_singer is not implemented for this type")
 
@@ -462,7 +523,9 @@ def pandas_df_to_singer(
     keep_null_fields=False,
     catalog_stream=None,
     trim_nested_nulls=False,
-    recursive_typing=True
+    recursive_typing=True,
+    target_state_fields=None,
+    target_state_include_hash=False,
 ) -> None:
     """Convert a pandas DataFrame into a singer file.
 
@@ -490,6 +553,11 @@ def pandas_df_to_singer(
     recursive_typing: boolean
         If true, the function will recursively convert arrays of objects to arrays of primitives.
         If false, the function will fuzzy list types when generating singer header.
+    target_state_fields: list[str] | str | None
+        Payload field names to persist in target state metadata (written to SCHEMA ``x-hotglue``).
+    target_state_include_hash: bool
+        When True, request that the platform include the export record hash in target state.
+        Defaults to False.
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
@@ -521,9 +589,10 @@ def pandas_df_to_singer(
     do_trim = trim_nested_nulls and not keep_nulls
 
     chunk_size = int(os.environ.get("SINGER_CHUNK_SIZE", "20000"))
+    x_hotglue = build_x_hotglue(target_state_fields, target_state_include_hash)
 
     with open(output, mode) as f:
-        write_schema(stream, header_map, keys, fp=f)
+        write_schema(stream, header_map, keys, fp=f, x_hotglue=x_hotglue)
 
         n = len(df)
         for start in range(0, n, chunk_size):
@@ -616,7 +685,9 @@ def polars_df_to_singer(
     unified_model=None,
     keep_null_fields=False,
     catalog_stream=None,
-    recursive_typing=True
+    recursive_typing=True,
+    target_state_fields=None,
+    target_state_include_hash=False,
 ) -> None:
     """Convert a polars DataFrame into a singer file.
 
@@ -642,18 +713,22 @@ def polars_df_to_singer(
     recursive_typing: boolean
         If true, the function will recursively convert arrays of objects to arrays of primitives.
         If false, the function will fuzzy list types when generating singer header.
+    target_state_fields: list[str] | str | None
+        Payload field names to persist in target state metadata (written to SCHEMA ``x-hotglue``).
+    target_state_include_hash: bool
+        When True, request that the platform include the export record hash in target state.
+        Defaults to False.
     """
 
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
 
     header_map = gen_singer_header_from_polars_schema(df.schema)
- 
-
+    x_hotglue = build_x_hotglue(target_state_fields, target_state_include_hash)
 
     with open(output, mode) as f:
         with redirect_stdout(f):
-            write_schema(stream, header_map, keys)
+            write_schema(stream, header_map, keys, x_hotglue=x_hotglue)
             for row in df.iter_rows(named=True):
                 row = {k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(v, datetime.datetime) else v for k, v in row.items()}
                 write_record(stream, row)
@@ -673,14 +748,16 @@ def polars_lf_to_singer(
     unified_model=None,
     keep_null_fields=False,
     catalog_stream=None,
-    recursive_typing=True
+    recursive_typing=True,
+    target_state_fields=None,
+    target_state_include_hash=False,
 ) -> None:
     """Convert a polars Lazyframe into a singer file.
 
     Parameters
     ----------
-    df: pd.DataFrame
-        Object to extract the types from.
+    df: pl.LazyFrame
+        Polars LazyFrame to convert to singer.
     stream: str
         Stream name to be used in the singer output file.
     output_dir: str
@@ -699,6 +776,11 @@ def polars_lf_to_singer(
     recursive_typing: boolean
         If true, the function will recursively convert arrays of objects to arrays of primitives.
         If false, the function will fuzzy list types when generating singer header.
+    target_state_fields: list[str] | str | None
+        Payload field names to persist in target state metadata (written to SCHEMA ``x-hotglue``).
+    target_state_include_hash: bool
+        When True, request that the platform include the export record hash in target state.
+        Defaults to False.
     """
 
     sink_fn = partial(
@@ -713,5 +795,7 @@ def polars_lf_to_singer(
         keep_null_fields=keep_null_fields,
         catalog_stream=catalog_stream,
         recursive_typing=recursive_typing,
+        target_state_fields=target_state_fields,
+        target_state_include_hash=target_state_include_hash,
     )
     df.sink_batches(sink_fn, chunk_size=1000)
