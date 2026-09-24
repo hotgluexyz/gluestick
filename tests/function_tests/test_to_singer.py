@@ -278,6 +278,25 @@ class TestPolarsToSinger:
         to_singer(df, "skus", str(tmp_path), filename="custom.singer")
         assert (tmp_path / "custom.singer").exists()
 
+    def test_nulls_dropped_by_default(self, tmp_path):
+        df = pl.DataFrame({"customer_name": ["alice"], "discount": [None]})
+        to_singer(df, "customers", str(tmp_path))
+        records = _get_records(_read_singer_lines(tmp_path / "data.singer"))
+        assert "discount" not in records[0]["record"]
+
+    def test_keep_null_fields_preserves_nulls(self, tmp_path):
+        df = pl.DataFrame({"customer_name": ["alice"], "discount": [None]})
+        to_singer(df, "customers", str(tmp_path), keep_null_fields=True)
+        records = _get_records(_read_singer_lines(tmp_path / "data.singer"))
+        assert "discount" in records[0]["record"]
+        assert records[0]["record"]["discount"] is None
+
+    def test_float_nan_dropped_by_default(self, tmp_path):
+        df = pl.DataFrame({"customer_name": ["alice"], "score": [float("nan")]})
+        to_singer(df, "customers", str(tmp_path))
+        records = _get_records(_read_singer_lines(tmp_path / "data.singer"))
+        assert "score" not in records[0]["record"]
+
 
 class TestPolarsLazyFrameToSinger:
     def test_lazyframe_produces_same_output(self, tmp_path):

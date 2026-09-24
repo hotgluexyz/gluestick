@@ -720,6 +720,13 @@ def polars_df_to_singer(
         Defaults to False.
     """
 
+    catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
+    include_all_unified_fields = (
+        os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true"
+        and unified_model is not None
+    )
+    keep_nulls = catalog_schema or include_all_unified_fields or keep_null_fields
+
     output = os.path.join(output_dir, filename)
     mode = "a" if os.path.isfile(output) else "w"
 
@@ -730,7 +737,18 @@ def polars_df_to_singer(
         with redirect_stdout(f):
             write_schema(stream, header_map, keys, x_hotglue=x_hotglue)
             for row in df.iter_rows(named=True):
-                row = {k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(v, datetime.datetime) else v for k, v in row.items()}
+                row = {
+                    k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    if isinstance(v, datetime.datetime)
+                    else v
+                    for k, v in row.items()
+                }
+                if not keep_nulls:
+                    row = {k: v for k, v in row.items() if not _is_null_scalar(v)}
+                else:
+                    for k, v in list(row.items()):
+                        if _is_null_scalar(v):
+                            row[k] = None
                 write_record(stream, row)
 
 
