@@ -8,6 +8,7 @@ import polars as pl
 import pytest
 
 from gluestick.etl_utils import to_export
+from gluestick.singer import X_HOTGLUE_KEY
 
 
 def _pd_small():
@@ -41,6 +42,25 @@ def test_pandas_singer_creates_data_singer(tmp_path):
     lines = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
     types = {x["type"] for x in lines}
     assert "SCHEMA" in types and "RECORD" in types and "STATE" in types
+
+
+def test_pandas_singer_writes_x_hotglue_from_to_export(tmp_path):
+    df = pd.DataFrame({"externalId": ["a"], "email": ["a@example.com"]})
+    to_export(
+        df,
+        name="Contacts",
+        output_dir=str(tmp_path),
+        keys=["externalId"],
+        export_format="singer",
+        target_state_fields=["email"],
+        target_state_include_hash=True,
+    )
+    lines = [json.loads(line) for line in (Path(tmp_path) / "data.singer").read_text().splitlines() if line.strip()]
+    schema = next(line for line in lines if line["type"] == "SCHEMA")
+    assert schema[X_HOTGLUE_KEY] == {
+        "target_state_fields": ["email"],
+        "target_state_include_hash": True,
+    }
 
 
 @pytest.mark.parametrize(
