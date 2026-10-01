@@ -265,13 +265,19 @@ def test_pandas_custom_plugin_extends_export(monkeypatch, tmp_path):
     assert record["record"]["extra"] == "x"
 
 
-def test_pandas_custom_plugin_bad_return_stops_export(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    "body",
+    [
+        "    return df\n",
+        "    return None, model, key_properties\n",
+    ],
+)
+def test_pandas_custom_plugin_bad_return_stops_export(monkeypatch, tmp_path, body):
     root = tmp_path / "job"
     plugins = root / "plugins"
     plugins.mkdir(parents=True)
     (plugins / "orders_post_process.py").write_text(
-        "def main(context, df, model, key_properties, tenant_config):\n"
-        "    return df\n"
+        "def main(context, df, model, key_properties, tenant_config):\n" + body
     )
     monkeypatch.setenv("ROOT_DIR", str(root))
 

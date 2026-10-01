@@ -115,7 +115,11 @@ def execute_custom_plugins(
         plugin_df = current_df.copy(deep=False)
         logger.info("Running custom plugin %s for %s", plugin_file, stream_name)
         result = main(context, plugin_df, current_model, current_keys, tenant_config)
-        if not isinstance(result, tuple) or len(result) != 3:
+        if (
+            not isinstance(result, tuple)
+            or len(result) != 3
+            or not isinstance(result[0], pd.DataFrame)
+        ):
             raise ValueError(
                 f"Custom plugin {plugin_file} main must return (df, model, key_properties)"
             )
