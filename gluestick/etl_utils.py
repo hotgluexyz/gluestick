@@ -18,6 +18,7 @@ from gluestick.readers.pl_reader import PolarsReader
 from functools import singledispatch
 from typing import Any, NoReturn
 from gluestick.date_utils import localize_datetime
+from gluestick.plugin_utils import execute_custom_plugins
 from gluestick.snapshot_lock import prepare_snapshot_write, finish_snapshot_write
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]) -> dict[str, pd.DataFrame]:
@@ -637,6 +638,11 @@ def pandas_df_to_export(
         it outputs a singer, parquet, json or csv file
 
     """
+    # Apply {ROOT_DIR}/plugins/{name}_post_process.py before any output-name override.
+    data, unified_model, keys = execute_custom_plugins(
+        name, data, unified_model, keys, output_dir
+    )
+
     # NOTE: This is meant to allow users to override the default output name for a specific stream
     if os.environ.get(f"HG_UNIFIED_OUTPUT_{name.upper()}"):
         name = os.environ[f"HG_UNIFIED_OUTPUT_{name.upper()}"]
