@@ -9,3 +9,4 @@ from .readers.pl_reader import *  # noqa
 from .date_utils import *  # noqa
 from .unified_models_utils import *  # noqa
 from .config_utils import *  # noqa
+from .plugin_utils import *  # noqa
