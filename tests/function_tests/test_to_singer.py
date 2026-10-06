@@ -187,6 +187,30 @@ class TestNullHandling:
         record = _get_records(_read_singer_lines(tmp_path / "data.singer"))[0]["record"]
         assert record["active"] is None
 
+    def test_coerce_boolean_nulls_before_dropping_other_nulls(self, tmp_path):
+        schema = {
+            "type": ["object", "null"],
+            "properties": {
+                "name": {"type": ["string", "null"]},
+                "active": {"type": ["boolean", "null"]},
+                "note": {"type": ["string", "null"]},
+            },
+        }
+        df = pd.DataFrame({"name": ["alice"], "active": [None], "note": [None]})
+        to_singer(
+            df,
+            "customers",
+            str(tmp_path),
+            allow_objects=True,
+            schema=schema,
+            keep_null_fields=False,
+            coerce_boolean_nulls=True,
+        )
+        record = _get_records(_read_singer_lines(tmp_path / "data.singer"))[0]["record"]
+        assert record["active"] is False
+        assert record["name"] == "alice"
+        assert "note" not in record
+
     def test_trim_nested_nulls(self, tmp_path):
         df = pd.DataFrame({
             "metadata": [{"region": "US", "coupon": None}],

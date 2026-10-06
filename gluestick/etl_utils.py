@@ -722,8 +722,6 @@ def polars_lf_to_export(
     row_group_size: int | None = None,
     target_state_fields=None,
     target_state_include_hash=False,
-    keep_null_fields=False,
-    coerce_boolean_nulls=False,
 ) -> None:
     """Write a Polars LazyFrame to a specified format.
 
@@ -796,8 +794,6 @@ def polars_lf_to_export(
             schema=schema,
             target_state_fields=target_state_fields,
             target_state_include_hash=target_state_include_hash,
-            keep_null_fields=keep_null_fields,
-            coerce_boolean_nulls=coerce_boolean_nulls,
         )
     elif export_format == "parquet":
         data.sink_parquet(
@@ -826,8 +822,6 @@ def polars_df_to_export(
     reserved_variables={},
     target_state_fields=None,
     target_state_include_hash=False,
-    keep_null_fields=False,
-    coerce_boolean_nulls=False,
 ) -> None:
     """Write a Polars DataFrame to a specified format.
 
@@ -896,8 +890,6 @@ def polars_df_to_export(
             schema=schema,
             target_state_fields=target_state_fields,
             target_state_include_hash=target_state_include_hash,
-            keep_null_fields=keep_null_fields,
-            coerce_boolean_nulls=coerce_boolean_nulls,
         )
     elif export_format == "parquet":
         data.write_parquet(

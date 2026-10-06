@@ -155,6 +155,18 @@ def _is_null_scalar(v) -> bool:
     return False
 
 
+def _schema_contains_boolean(schema) -> bool:
+    if not isinstance(schema, dict):
+        return False
+    if "boolean" in _schema_types(schema):
+        return True
+    properties = schema.get("properties")
+    if isinstance(properties, dict) and any(_schema_contains_boolean(prop) for prop in properties.values()):
+        return True
+    items = schema.get("items")
+    return isinstance(items, dict) and _schema_contains_boolean(items)
+
+
 def _schema_types(schema) -> list:
     if not isinstance(schema, dict):
         return []
@@ -602,10 +614,6 @@ def pandas_df_to_singer(
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
 
-    # drop columns with all null values except when we want to keep null fields
-    if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
-        df = df.dropna(how="all", axis=1)
-    
     # .copy() is required to get a fully independent DataFrame before gen_singer_header mutates columns
     df = df.copy()
 
@@ -620,6 +628,18 @@ def pandas_df_to_singer(
 
     elif unified_model:
         schema = unwrap_json_schema(unified_model.model_json_schema())
+
+    # Fill boolean nulls before null columns are dropped, so an all-null boolean
+    # column can be written as false. Other null fields are unchanged.
+    if coerce_boolean_nulls and isinstance(schema, dict):
+        properties = schema.get("properties") or {}
+        for column, prop in properties.items():
+            if column in df.columns and _schema_contains_boolean(prop):
+                df[column] = df[column].map(lambda value, prop=prop: _coerce_boolean_nulls(value, prop))
+
+    # drop columns with all null values except when we want to keep null fields
+    if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
+        df = df.dropna(how="all", axis=1)
 
     df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema, recursive_typing=recursive_typing)
     output = os.path.join(output_dir, filename)
@@ -647,9 +667,6 @@ def pandas_df_to_singer(
                     for k, v in list(rec.items()):
                         if _is_null_scalar(v):
                             rec[k] = None
-
-                if coerce_boolean_nulls:
-                    rec = _coerce_boolean_nulls(rec, header_map)
 
                 if do_trim:
                     rec = remove_nulls_deep(rec)
@@ -731,7 +748,6 @@ def polars_df_to_singer(
     recursive_typing=True,
     target_state_fields=None,
     target_state_include_hash=False,
-    coerce_boolean_nulls=False,
 ) -> None:
     """Convert a polars DataFrame into a singer file.
 
@@ -793,8 +809,6 @@ def polars_df_to_singer(
                     for k, v in list(row.items()):
                         if _is_null_scalar(v):
                             row[k] = None
-                if coerce_boolean_nulls:
-                    row = _coerce_boolean_nulls(row, header_map)
                 write_record(stream, row)
 
 
@@ -815,7 +829,6 @@ def polars_lf_to_singer(
     recursive_typing=True,
     target_state_fields=None,
     target_state_include_hash=False,
-    coerce_boolean_nulls=False,
 ) -> None:
     """Convert a polars Lazyframe into a singer file.
 
@@ -862,6 +875,5 @@ def polars_lf_to_singer(
         recursive_typing=recursive_typing,
         target_state_fields=target_state_fields,
         target_state_include_hash=target_state_include_hash,
-        coerce_boolean_nulls=coerce_boolean_nulls,
     )
     df.sink_batches(sink_fn, chunk_size=1000)
