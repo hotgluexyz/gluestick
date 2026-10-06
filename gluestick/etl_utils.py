@@ -573,6 +573,8 @@ def to_export(
     reserved_variables={},
     target_state_fields=None,
     target_state_include_hash=False,
+    keep_null_fields=False,
+    coerce_boolean_nulls=False,
     ) -> None:
     raise NotImplementedError("to_export is not implemented for this dataframe type")
 
@@ -592,6 +594,8 @@ def pandas_df_to_export(
     trim_nested_nulls=False,
     target_state_fields=None,
     target_state_include_hash=False,
+    keep_null_fields=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     """Parse a stringified dict or list of dicts.
 
@@ -631,6 +635,12 @@ def pandas_df_to_export(
     target_state_include_hash: bool
         When True, request record hash inclusion in target state metadata.
         Only used when ``export_format`` is ``singer``. Defaults to False.
+    keep_null_fields: bool
+        When True, Singer export keeps null fields. Defaults to False.
+        Only used when ``export_format`` is ``singer``.
+    coerce_boolean_nulls: bool
+        When True, Singer export writes null boolean fields as false.
+        Defaults to False. Only used when ``export_format`` is ``singer``.
 
     Returns
     -------
@@ -673,6 +683,8 @@ def pandas_df_to_export(
             trim_nested_nulls=trim_nested_nulls,
             target_state_fields=target_state_fields,
             target_state_include_hash=target_state_include_hash,
+            keep_null_fields=keep_null_fields,
+            coerce_boolean_nulls=coerce_boolean_nulls,
         )
     elif export_format == "parquet":
         if stringify_objects:
@@ -710,6 +722,8 @@ def polars_lf_to_export(
     row_group_size: int | None = None,
     target_state_fields=None,
     target_state_include_hash=False,
+    keep_null_fields=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     """Write a Polars LazyFrame to a specified format.
 
@@ -782,6 +796,8 @@ def polars_lf_to_export(
             schema=schema,
             target_state_fields=target_state_fields,
             target_state_include_hash=target_state_include_hash,
+            keep_null_fields=keep_null_fields,
+            coerce_boolean_nulls=coerce_boolean_nulls,
         )
     elif export_format == "parquet":
         data.sink_parquet(
@@ -810,6 +826,8 @@ def polars_df_to_export(
     reserved_variables={},
     target_state_fields=None,
     target_state_include_hash=False,
+    keep_null_fields=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     """Write a Polars DataFrame to a specified format.
 
@@ -878,6 +896,8 @@ def polars_df_to_export(
             schema=schema,
             target_state_fields=target_state_fields,
             target_state_include_hash=target_state_include_hash,
+            keep_null_fields=keep_null_fields,
+            coerce_boolean_nulls=coerce_boolean_nulls,
         )
     elif export_format == "parquet":
         data.write_parquet(

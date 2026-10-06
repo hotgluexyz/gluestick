@@ -155,6 +155,41 @@ def _is_null_scalar(v) -> bool:
     return False
 
 
+def _schema_types(schema) -> list:
+    if not isinstance(schema, dict):
+        return []
+    types = schema.get("type")
+    if isinstance(types, str):
+        return [types]
+    if isinstance(types, list):
+        return types
+    return []
+
+
+def _coerce_boolean_nulls(value, schema):
+    """Write False for null Singer boolean fields, including nested ones.
+
+    The removed singer.Transformer tried boolean before null, and bool(None) is
+    False. Other nulls stay null. Callers opt in with coerce_boolean_nulls.
+    """
+    if not isinstance(schema, dict):
+        return value
+    if "boolean" in _schema_types(schema) and _is_null_scalar(value):
+        return False
+    if isinstance(value, dict):
+        properties = schema.get("properties")
+        if isinstance(properties, dict):
+            return {
+                key: _coerce_boolean_nulls(item, properties[key]) if key in properties else item
+                for key, item in value.items()
+            }
+    elif isinstance(value, list):
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            return [_coerce_boolean_nulls(item, item_schema) for item in value]
+    return value
+
+
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True) -> tuple[pd.DataFrame, dict]:
     """Generate singer headers based on pandas types.
 
@@ -507,6 +542,7 @@ def to_singer(
     recursive_typing=True,
     target_state_fields=None,
     target_state_include_hash=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     raise NotImplementedError("to_singer is not implemented for this type")
 
@@ -526,6 +562,7 @@ def pandas_df_to_singer(
     recursive_typing=True,
     target_state_fields=None,
     target_state_include_hash=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     """Convert a pandas DataFrame into a singer file.
 
@@ -558,6 +595,9 @@ def pandas_df_to_singer(
     target_state_include_hash: bool
         When True, request that the platform include the export record hash in target state.
         Defaults to False.
+    coerce_boolean_nulls: boolean
+        When True, null values on boolean schema fields are written as false.
+        Defaults to False. Does not change the keep_null_fields default.
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
@@ -607,6 +647,9 @@ def pandas_df_to_singer(
                     for k, v in list(rec.items()):
                         if _is_null_scalar(v):
                             rec[k] = None
+
+                if coerce_boolean_nulls:
+                    rec = _coerce_boolean_nulls(rec, header_map)
 
                 if do_trim:
                     rec = remove_nulls_deep(rec)
@@ -688,6 +731,7 @@ def polars_df_to_singer(
     recursive_typing=True,
     target_state_fields=None,
     target_state_include_hash=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     """Convert a polars DataFrame into a singer file.
 
@@ -749,6 +793,8 @@ def polars_df_to_singer(
                     for k, v in list(row.items()):
                         if _is_null_scalar(v):
                             row[k] = None
+                if coerce_boolean_nulls:
+                    row = _coerce_boolean_nulls(row, header_map)
                 write_record(stream, row)
 
 
@@ -769,6 +815,7 @@ def polars_lf_to_singer(
     recursive_typing=True,
     target_state_fields=None,
     target_state_include_hash=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     """Convert a polars Lazyframe into a singer file.
 
@@ -815,5 +862,6 @@ def polars_lf_to_singer(
         recursive_typing=recursive_typing,
         target_state_fields=target_state_fields,
         target_state_include_hash=target_state_include_hash,
+        coerce_boolean_nulls=coerce_boolean_nulls,
     )
     df.sink_batches(sink_fn, chunk_size=1000)

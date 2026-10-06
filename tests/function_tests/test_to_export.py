@@ -319,3 +319,29 @@ def test_pandas_singer_export_10k_records(tmp_path):
     assert r0["id"] == 0 and r0["name"] == "row_0"
     assert records[42]["record"]["name"] == "row_42"
     assert records[-1]["record"]["id"] == n - 1
+
+
+def test_pandas_singer_forwards_null_and_boolean_flags(tmp_path):
+    schema = {
+        "type": ["object", "null"],
+        "properties": {
+            "id": {"type": ["string", "null"]},
+            "active": {"type": ["boolean", "null"]},
+            "note": {"type": ["string", "null"]},
+        },
+    }
+    df = pd.DataFrame({"id": ["1"], "active": [None], "note": [None]})
+    to_export(
+        df,
+        name="Accounts",
+        output_dir=str(tmp_path),
+        keys=["id"],
+        export_format="singer",
+        schema=schema,
+        keep_null_fields=True,
+        coerce_boolean_nulls=True,
+    )
+    lines = [json.loads(line) for line in (Path(tmp_path) / "data.singer").read_text().splitlines() if line.strip()]
+    record = next(line["record"] for line in lines if line["type"] == "RECORD")
+    assert record["active"] is False
+    assert record["note"] is None
