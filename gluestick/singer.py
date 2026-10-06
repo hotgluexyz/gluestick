@@ -167,9 +167,7 @@ def _schema_contains_boolean(schema) -> bool:
     return isinstance(items, dict) and _schema_contains_boolean(items)
 
 
-def _schema_types(schema) -> list:
-    if not isinstance(schema, dict):
-        return []
+def _schema_types(schema: dict) -> list:
     types = schema.get("type")
     if isinstance(types, str):
         return [types]
