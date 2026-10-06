@@ -18,6 +18,7 @@ from gluestick.readers.pl_reader import PolarsReader
 from functools import singledispatch
 from typing import Any, NoReturn
 from gluestick.date_utils import localize_datetime
+from gluestick.plugin_utils import execute_custom_plugins
 from gluestick.snapshot_lock import prepare_snapshot_write, finish_snapshot_write
 
 def read_csv_folder(path, converters={}, index_cols={}, ignore=[]) -> dict[str, pd.DataFrame]:
@@ -572,6 +573,8 @@ def to_export(
     reserved_variables={},
     target_state_fields=None,
     target_state_include_hash=False,
+    keep_null_fields=False,
+    coerce_boolean_nulls=False,
     ) -> None:
     raise NotImplementedError("to_export is not implemented for this dataframe type")
 
@@ -591,6 +594,8 @@ def pandas_df_to_export(
     trim_nested_nulls=False,
     target_state_fields=None,
     target_state_include_hash=False,
+    keep_null_fields=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     """Parse a stringified dict or list of dicts.
 
@@ -630,6 +635,12 @@ def pandas_df_to_export(
     target_state_include_hash: bool
         When True, request record hash inclusion in target state metadata.
         Only used when ``export_format`` is ``singer``. Defaults to False.
+    keep_null_fields: bool
+        When True, Singer export keeps null fields. Defaults to False.
+        Only used when ``export_format`` is ``singer``.
+    coerce_boolean_nulls: bool
+        When True, Singer export writes null boolean fields as false.
+        Defaults to False. Only used when ``export_format`` is ``singer``.
 
     Returns
     -------
@@ -637,6 +648,11 @@ def pandas_df_to_export(
         it outputs a singer, parquet, json or csv file
 
     """
+    # Apply {ROOT_DIR}/plugins/{name}_post_process.py before any output-name override.
+    data, unified_model, keys = execute_custom_plugins(
+        name, data, unified_model, keys, output_dir
+    )
+
     # NOTE: This is meant to allow users to override the default output name for a specific stream
     if os.environ.get(f"HG_UNIFIED_OUTPUT_{name.upper()}"):
         name = os.environ[f"HG_UNIFIED_OUTPUT_{name.upper()}"]
@@ -667,6 +683,8 @@ def pandas_df_to_export(
             trim_nested_nulls=trim_nested_nulls,
             target_state_fields=target_state_fields,
             target_state_include_hash=target_state_include_hash,
+            keep_null_fields=keep_null_fields,
+            coerce_boolean_nulls=coerce_boolean_nulls,
         )
     elif export_format == "parquet":
         if stringify_objects:

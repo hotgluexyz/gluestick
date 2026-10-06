@@ -155,6 +155,51 @@ def _is_null_scalar(v) -> bool:
     return False
 
 
+def _schema_contains_boolean(schema) -> bool:
+    if not isinstance(schema, dict):
+        return False
+    if "boolean" in _schema_types(schema):
+        return True
+    properties = schema.get("properties")
+    if isinstance(properties, dict) and any(_schema_contains_boolean(prop) for prop in properties.values()):
+        return True
+    items = schema.get("items")
+    return isinstance(items, dict) and _schema_contains_boolean(items)
+
+
+def _schema_types(schema: dict) -> list:
+    types = schema.get("type")
+    if isinstance(types, str):
+        return [types]
+    if isinstance(types, list):
+        return types
+    return []
+
+
+def _coerce_boolean_nulls(value, schema):
+    """Write False for null Singer boolean fields, including nested ones.
+
+    The removed singer.Transformer tried boolean before null, and bool(None) is
+    False. Other nulls stay null. Callers opt in with coerce_boolean_nulls.
+    """
+    if not isinstance(schema, dict):
+        return value
+    if "boolean" in _schema_types(schema) and _is_null_scalar(value):
+        return False
+    if isinstance(value, dict):
+        properties = schema.get("properties")
+        if isinstance(properties, dict):
+            return {
+                key: _coerce_boolean_nulls(item, properties[key]) if key in properties else item
+                for key, item in value.items()
+            }
+    elif isinstance(value, list):
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            return [_coerce_boolean_nulls(item, item_schema) for item in value]
+    return value
+
+
 def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalog_schema=False, recursive_typing=True) -> tuple[pd.DataFrame, dict]:
     """Generate singer headers based on pandas types.
 
@@ -507,6 +552,7 @@ def to_singer(
     recursive_typing=True,
     target_state_fields=None,
     target_state_include_hash=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     raise NotImplementedError("to_singer is not implemented for this type")
 
@@ -526,6 +572,7 @@ def pandas_df_to_singer(
     recursive_typing=True,
     target_state_fields=None,
     target_state_include_hash=False,
+    coerce_boolean_nulls=False,
 ) -> None:
     """Convert a pandas DataFrame into a singer file.
 
@@ -558,14 +605,13 @@ def pandas_df_to_singer(
     target_state_include_hash: bool
         When True, request that the platform include the export record hash in target state.
         Defaults to False.
+    coerce_boolean_nulls: boolean
+        When True, null values on boolean schema fields are written as false.
+        Defaults to False. Does not change the keep_null_fields default.
     """
     catalog_schema = os.environ.get("USE_CATALOG_SCHEMA", "false").lower() == "true"
     include_all_unified_fields = os.environ.get("INCLUDE_ALL_UNIFIED_FIELDS", "false").lower() == "true" and unified_model is not None
 
-    # drop columns with all null values except when we want to keep null fields
-    if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
-        df = df.dropna(how="all", axis=1)
-    
     # .copy() is required to get a fully independent DataFrame before gen_singer_header mutates columns
     df = df.copy()
 
@@ -580,6 +626,18 @@ def pandas_df_to_singer(
 
     elif unified_model:
         schema = unwrap_json_schema(unified_model.model_json_schema())
+
+    # Fill boolean nulls before null columns are dropped, so an all-null boolean
+    # column can be written as false. Other null fields are unchanged.
+    if coerce_boolean_nulls and isinstance(schema, dict):
+        properties = schema.get("properties") or {}
+        for column, prop in properties.items():
+            if column in df.columns and _schema_contains_boolean(prop):
+                df[column] = df[column].map(lambda value, prop=prop: _coerce_boolean_nulls(value, prop))
+
+    # drop columns with all null values except when we want to keep null fields
+    if allow_objects and not (catalog_schema or include_all_unified_fields or keep_null_fields):
+        df = df.dropna(how="all", axis=1)
 
     df, header_map = gen_singer_header(df, allow_objects, schema, catalog_schema, recursive_typing=recursive_typing)
     output = os.path.join(output_dir, filename)

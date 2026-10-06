@@ -133,6 +133,84 @@ class TestNullHandling:
         assert "discount" in records[0]["record"]
         assert records[0]["record"]["discount"] is None
 
+    def test_coerce_boolean_nulls_writes_false(self, tmp_path):
+        schema = {
+            "type": ["object", "null"],
+            "properties": {
+                "name": {"type": ["string", "null"]},
+                "active": {"type": ["boolean", "null"]},
+                "lines": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": ["object", "null"],
+                        "properties": {
+                            "taxInclusive": {"type": ["boolean", "null"]},
+                            "note": {"type": ["string", "null"]},
+                        },
+                    },
+                },
+            },
+        }
+        df = pd.DataFrame({
+            "name": ["alice"],
+            "active": [None],
+            "lines": [[{"taxInclusive": None, "note": None}]],
+        })
+        to_singer(
+            df,
+            "customers",
+            str(tmp_path),
+            allow_objects=True,
+            schema=schema,
+            keep_null_fields=True,
+            coerce_boolean_nulls=True,
+        )
+        record = _get_records(_read_singer_lines(tmp_path / "data.singer"))[0]["record"]
+        assert record["active"] is False
+        assert record["name"] == "alice"
+        assert record["lines"][0]["taxInclusive"] is False
+        assert record["lines"][0]["note"] is None
+
+    def test_coerce_boolean_nulls_defaults_off(self, tmp_path):
+        schema = {
+            "type": ["object", "null"],
+            "properties": {"active": {"type": ["boolean", "null"]}},
+        }
+        df = pd.DataFrame({"active": [None]})
+        to_singer(
+            df,
+            "customers",
+            str(tmp_path),
+            schema=schema,
+            keep_null_fields=True,
+        )
+        record = _get_records(_read_singer_lines(tmp_path / "data.singer"))[0]["record"]
+        assert record["active"] is None
+
+    def test_coerce_boolean_nulls_before_dropping_other_nulls(self, tmp_path):
+        schema = {
+            "type": ["object", "null"],
+            "properties": {
+                "name": {"type": ["string", "null"]},
+                "active": {"type": ["boolean", "null"]},
+                "note": {"type": ["string", "null"]},
+            },
+        }
+        df = pd.DataFrame({"name": ["alice"], "active": [None], "note": [None]})
+        to_singer(
+            df,
+            "customers",
+            str(tmp_path),
+            allow_objects=True,
+            schema=schema,
+            keep_null_fields=False,
+            coerce_boolean_nulls=True,
+        )
+        record = _get_records(_read_singer_lines(tmp_path / "data.singer"))[0]["record"]
+        assert record["active"] is False
+        assert record["name"] == "alice"
+        assert "note" not in record
+
     def test_trim_nested_nulls(self, tmp_path):
         df = pd.DataFrame({
             "metadata": [{"region": "US", "coupon": None}],
