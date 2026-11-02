@@ -238,7 +238,7 @@ def gen_singer_header(df: pd.DataFrame, allow_objects: bool, schema=None, catalo
         dtype = df[col].dtype.__str__().lower()
 
         if "date" in dtype:
-            df[col] = df[col].dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            df[col] = pd.to_datetime(df[col], utc=True).dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         col_type = next((t for t in type_mapping.keys() if t in dtype), None)
 
@@ -386,7 +386,8 @@ def deep_convert_datetimes(value) -> Any:
 
     Notes
     -----
-    This function transforms all datetimes to %Y-%m-%dT%H:%M:%S.%fZ
+    Timezone-aware datetimes are converted to UTC before formatting.
+    Naive datetimes retain their existing wall time.
 
     Parameters
     ----------
@@ -402,6 +403,8 @@ def deep_convert_datetimes(value) -> Any:
     elif isinstance(value, dict):
         return {k: deep_convert_datetimes(v) for k, v in value.items()}
     elif isinstance(value, datetime.datetime):
+        if value.utcoffset() is not None:
+            value = value.astimezone(pytz.utc)
         return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     elif isinstance(value, datetime.date):
         return value.strftime("%Y-%m-%d")
@@ -796,7 +799,7 @@ def polars_df_to_singer(
             write_schema(stream, header_map, keys, x_hotglue=x_hotglue)
             for row in df.iter_rows(named=True):
                 row = {
-                    k: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+                    k: deep_convert_datetimes(v)
                     if isinstance(v, datetime.datetime)
                     else v
                     for k, v in row.items()
