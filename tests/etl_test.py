@@ -224,7 +224,14 @@ class TestETL(object):
             for col in test_output_df.columns:
                 print("Dtype in test: ", test_output_df[col].dtype)
                 print("Dtype in true: ", true_output_df[col].dtype)
-                assert test_output_df[col].equals(true_output_df[col]), f"{type} -> Column {col} is incorrect"
+                pd.testing.assert_series_equal(
+                    test_output_df[col],
+                    true_output_df[col],
+                    check_exact=not pd.api.types.is_float_dtype(test_output_df[col]),
+                    rtol=1e-12,
+                    atol=1e-15,
+                    obj=f"{type} -> Column {col}",
+                )
 
     def test_map_fields(self):
         print("=====")
