@@ -12,7 +12,7 @@ setup(
     url="https://github.com/hotgluexyz/gluestick",
     install_requires=[
         "numpy>=1.22",
-        "pandas>=1.5.3",
+        "pandas>=1.2.5",
         "pyarrow>=8.0.0",
         "pytz>=2022.6",
         "polars>=1.34.0,<2",
