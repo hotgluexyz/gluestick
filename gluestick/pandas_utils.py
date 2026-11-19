@@ -68,7 +68,7 @@ def json_tuple_to_cols(
         lambda y: get_value(y, col_config["look_up"]["value_prop"])
     )
 
-    return df.drop(column_name, 1)
+    return df.drop(column_name, axis=1)
 
 
 def rename(df, target_columns) -> pd.DataFrame:
@@ -440,7 +440,7 @@ def compress_rows_to_col(df: pd.DataFrame, column_prefix: str, pk) -> pd.DataFra
 
     df[column_prefix] = df_compress.apply(lambda x: str(x.to_dict()), axis=1)
 
-    grouped = df.groupby(pk, axis=0)[column_prefix].apply(list).reset_index()
+    grouped = df.groupby(pk)[column_prefix].apply(list).reset_index()
     df.drop_duplicates(pk, inplace=True)
     return df.merge(grouped, how="left", on=pk)
 

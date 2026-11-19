@@ -11,7 +11,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/hotgluexyz/gluestick",
     install_requires=[
-        "numpy>=1.4",
+        "numpy>=1.22",
         "pandas>=1.2.5",
         "pyarrow>=8.0.0",
         "pytz>=2022.6",
